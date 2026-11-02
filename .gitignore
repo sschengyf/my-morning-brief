@@ -1,0 +1,12 @@
+node_modules/
+
+# Personal data and secrets: token, private calendar links, location, schedule, todos
+config.toml
+state.json
+state.json.corrupt-*
+location.json
+todo.md
+archive/
+logs/
+
+.DS_Store

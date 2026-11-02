@@ -1,0 +1,45 @@
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Hacker News: Front Page</title><link>https://news.ycombinator.com/</link><description>Hacker News RSS</description><docs>https://hnrss.org/</docs><generator>hnrss v2.1.1</generator><lastBuildDate>Mon, 02 Nov 2026 18:10:15 +0000</lastBuildDate><atom:link href="https://hnrss.org/frontpage?points=200" rel="self" type="application/rss+xml"></atom:link><item><title><![CDATA[WTF Ubuntu?]]></title><description><![CDATA[
+<p>Article URL: <a href="https://chalmovsky.com/posts/wtf-ubuntu">https://chalmovsky.com/posts/wtf-ubuntu</a></p>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50337608">https://news.ycombinator.com/item?id=50337608</a></p>
+<p>Points: 776</p>
+<p># Comments: 394</p>
+]]></description><pubDate>Mon, 02 Nov 2026 14:52:00 +0000</pubDate><link>https://chalmovsky.com/posts/wtf-ubuntu</link><dc:creator>chalmovsky</dc:creator><comments>https://news.ycombinator.com/item?id=50337608</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50337608</guid></item><item><title><![CDATA[Supermarket freezers across Europe hit by second suspected cyber-attack]]></title><description><![CDATA[
+<p><a href="https://www.bbc.com/news/articles/cq1kd1nee80eo" rel="nofollow">https://www.bbc.com/news/articles/cq1kd1nee80eo</a><p><a href="https://www.irishtimes.com/technology/data-security/2026/11/02/supervalu-removes-frozen-and-chilled-food-from-13-stores-after-cyber-attack-on-fridges/" rel="nofollow">https://www.irishtimes.com/technology/data-security/2026/11/...</a></p>
+<hr>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50335615">https://news.ycombinator.com/item?id=50335615</a></p>
+<p>Points: 243</p>
+<p># Comments: 318</p>
+]]></description><pubDate>Mon, 02 Nov 2026 11:50:13 +0000</pubDate><link>https://www.theguardian.com/world/2026/nov/02/supermarket-freezers-across-europe-hit-by-second-suspected-cyber-attack</link><dc:creator>fergie</dc:creator><comments>https://news.ycombinator.com/item?id=50335615</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50335615</guid></item><item><title><![CDATA[Bones may release proteins that slow aging and extend life span]]></title><description><![CDATA[
+<p>Article URL: <a href="https://www.science.org/content/article/bones-may-release-proteins-slow-aging-and-extend-life-span">https://www.science.org/content/article/bones-may-release-proteins-slow-aging-and-extend-life-span</a></p>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50331957">https://news.ycombinator.com/item?id=50331957</a></p>
+<p>Points: 270</p>
+<p># Comments: 100</p>
+]]></description><pubDate>Mon, 02 Nov 2026 01:31:07 +0000</pubDate><link>https://www.science.org/content/article/bones-may-release-proteins-slow-aging-and-extend-life-span</link><dc:creator>EA-3167</dc:creator><comments>https://news.ycombinator.com/item?id=50331957</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50331957</guid></item><item><title><![CDATA[Ask HN: Which TV do you recommend for privacy?]]></title><description><![CDATA[
+<p>I haven’t owned a TV in years and would like one that respects my privacy. Are there any TV’s which do this well? I am looking for something in the 60”to 80”range and would like a 4k display with at least 60hz display. I don’t mind paying a premium.<p>I have heard good things about Apple TV as a better alternative to most smart TV native apps. Would some TV’s pair better with this than others for privacy? I don’t want the TV doing anything other than being the display for Apple TV.<p>I am curious what success others have had.</p>
+<hr>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50328896">https://news.ycombinator.com/item?id=50328896</a></p>
+<p>Points: 641</p>
+<p># Comments: 765</p>
+]]></description><pubDate>Sun, 01 Nov 2026 19:35:27 +0000</pubDate><link>https://news.ycombinator.com/item?id=50328896</link><dc:creator>LecroJS</dc:creator><comments>https://news.ycombinator.com/item?id=50328896</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50328896</guid></item><item><title><![CDATA[Show HN: HackerBooks – HackerTube, but for books mentioned on HN]]></title><description><![CDATA[
+<p>Saw Karpathy's HackerTube and wanted the same thing for books. So I had Claude build one (Opus 5.5).<p>It's ~16.5k books that at least two different HN commenters brought up, from 2007 till now. Each book links back to the comments that mentioned it. Data is downloadable from the about page.<p>To be clear: Claude wrote almost all of it, including the data pipeline and the site. I mostly steered and made calls, bought the domain name, etc.<p>It counts mentions, so it's not perfect (praising a book and trashing it both count). If your favourite book is missing or matched to the wrong thing, tell me.</p>
+<hr>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50326821">https://news.ycombinator.com/item?id=50326821</a></p>
+<p>Points: 1774</p>
+<p># Comments: 290</p>
+]]></description><pubDate>Sun, 01 Nov 2026 15:58:28 +0000</pubDate><link>https://hackerbooks.org</link><dc:creator>roansh</dc:creator><comments>https://news.ycombinator.com/item?id=50326821</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50326821</guid></item><item><title><![CDATA[HackerTube: YouTube built from videos recommended by HN]]></title><description><![CDATA[
+<p>YouTube-style UI over 6,454 videos sourced from 39,834 HN comments since 2007.<p><a href="https://hackertube.org/" rel="nofollow">https://hackertube.org/</a></p>
+<hr>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50319510">https://news.ycombinator.com/item?id=50319510</a></p>
+<p>Points: 2778</p>
+<p># Comments: 618</p>
+]]></description><pubDate>Sat, 31 Oct 2026 19:56:53 +0000</pubDate><link>https://karpathy.bearblog.dev/hacker-tube/</link><dc:creator>karpathy</dc:creator><comments>https://news.ycombinator.com/item?id=50319510</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50319510</guid></item><item><title><![CDATA[Mystery of 60-Second Fluctuations in Power Grids Solved]]></title><description><![CDATA[
+<p>Article URL: <a href="https://www.fz-juelich.de/en/news/archive/press-release/2026/mystery-of-60-second-fluctuations-in-power-grids-solved">https://www.fz-juelich.de/en/news/archive/press-release/2026/mystery-of-60-second-fluctuations-in-power-grids-solved</a></p>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50315217">https://news.ycombinator.com/item?id=50315217</a></p>
+<p>Points: 238</p>
+<p># Comments: 104</p>
+]]></description><pubDate>Sat, 31 Oct 2026 11:53:47 +0000</pubDate><link>https://www.fz-juelich.de/en/news/archive/press-release/2026/mystery-of-60-second-fluctuations-in-power-grids-solved</link><dc:creator>_Microft</dc:creator><comments>https://news.ycombinator.com/item?id=50315217</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50315217</guid></item><item><title><![CDATA[Postgres 19 is late because so many more bugs are being found now]]></title><description><![CDATA[
+<p>Article URL: <a href="http://rhaas.blogspot.com/2026/10/postgres-19-is-late-and-its-ais-fault.html">http://rhaas.blogspot.com/2026/10/postgres-19-is-late-and-its-ais-fault.html</a></p>
+<p>Comments URL: <a href="https://news.ycombinator.com/item?id=50312408">https://news.ycombinator.com/item?id=50312408</a></p>
+<p>Points: 773</p>
+<p># Comments: 459</p>
+]]></description><pubDate>Sat, 31 Oct 2026 01:38:56 +0000</pubDate><link>http://rhaas.blogspot.com/2026/10/postgres-19-is-late-and-its-ais-fault.html</link><dc:creator>soheilpro</dc:creator><comments>https://news.ycombinator.com/item?id=50312408</comments><guid isPermaLink="false">https://news.ycombinator.com/item?id=50312408</guid></item></channel></rss>

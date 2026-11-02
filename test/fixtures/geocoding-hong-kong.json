@@ -1,0 +1,66 @@
+{
+  "results": [
+    {
+      "id": 1819729,
+      "name": "Hong Kong",
+      "latitude": 22.27832,
+      "longitude": 114.17469,
+      "elevation": 60.0,
+      "feature_code": "PPLC",
+      "country_code": "HK",
+      "timezone": "Asia/Hong_Kong",
+      "population": 7396076
+    },
+    {
+      "id": 1819730,
+      "name": "Hong Kong",
+      "latitude": 22.25,
+      "longitude": 114.16667,
+      "elevation": 46.0,
+      "feature_code": "PCLS",
+      "country_code": "HK",
+      "timezone": "Asia/Hong_Kong",
+      "population": 7498900
+    },
+    {
+      "id": 1819727,
+      "name": "Hong Kong",
+      "latitude": 22.26686,
+      "longitude": 114.17885,
+      "elevation": 154.0,
+      "feature_code": "ISL",
+      "country_code": "HK",
+      "timezone": "Asia/Hong_Kong",
+      "population": 1195529
+    },
+    {
+      "id": 12747064,
+      "name": "Hong Kong Island",
+      "latitude": 22.26302,
+      "longitude": 114.18419,
+      "elevation": 170.0,
+      "feature_code": "PPLX",
+      "country_code": "HK",
+      "timezone": "Asia/Hong_Kong",
+      "population": 1195529
+    },
+    {
+      "id": 8938815,
+      "name": "Hong Kong",
+      "latitude": 22.95805,
+      "longitude": -109.93898,
+      "elevation": 243.0,
+      "feature_code": "PPL",
+      "country_code": "MX",
+      "admin1_id": 4017698,
+      "admin2_id": 6941773,
+      "timezone": "America/Mazatlan",
+      "population": 5,
+      "country_id": 3996063,
+      "country": "Mexico",
+      "admin1": "Baja California Sur",
+      "admin2": "Los Cabos"
+    }
+  ],
+  "generationtime_ms": 0.20492077
+}

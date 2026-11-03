@@ -451,7 +451,8 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - **macOS 专属的东西隔离开**：`caffeinate`、launchd 脚本、`pmset` 说明只出现在各自的位置，并且按平台判断，主流程不依赖它们。
 - **模型调用走接口**：`llm.ts` 里的 `LlmClient` 接口，这次只实现 Ollama 版本。以后换成别的推理后端时只需要加一个实现，不改其他代码。
 - **优雅退出**：收到 SIGTERM/SIGINT 时停止长轮询、等当前的模型请求和文件写入完成（最多 30 秒）再退出。服务器和容器重启时会发这个信号。
-- **同一时间只跑一个实例**：迁移时先停掉 Mac 上的自启（`install-autostart.sh remove`），否则两边都会长轮询导致 409，还可能各发一份早报。
+- **同一时间只跑一个实例**：迁移时先停掉 Mac 上的自启（`install-autostart.sh remove`），否则两边都会长轮询导致 409，还可能各发一份早报。`data_dir/app.lock` 只能防住同一个数据目录上的第二个实例，防不住两台机器各跑一个。
+- **一个实例只服务一个人**：所有状态（数据目录、对话记忆、模型请求队列、锁）都按实例隔离，不要引入跨实例共享的全局状态或固定路径，这样以后可以一人一个容器（见第 7 节“多用户部署”）。
 
 ### 数据持久化
 
@@ -477,6 +478,14 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - Peter Thiel：同样只能用 Google News，单独一个搜索（`%22Peter+Thiel%22+when:2d`），结果里 Palantir 和政治新闻很多，靠新闻筛选（阶段 8.1）过滤。
   - X 平台：不接。官方 API 读取要付费，Nitter 和 RSSHub 的 X 路由需要真实账号 cookie，违反使用条款且不稳定。如果以后某个只在 X 上发的账号确实重要，再考虑用官方 API 加一种 `type = "x"` 的源。
 - **根据反馈学习新闻偏好**（依赖阶段 8.1）：早报里每条新闻后加 👍/👎 按钮（Telegram inline keyboard / Discord 按钮），反馈连同标题、来源记到 `data_dir/feedback.jsonl`（追加写入）。每周让模型根据反馈总结出新的 `interests`/`avoid` 建议，发给用户，用户点“采用”后才写入。学到的偏好单独存在 `data_dir/preferences.toml`，和手写的配置合并使用，不改 `config.toml`。
-- **部署到服务器**：加 Dockerfile 和 systemd unit 示例。迁移前要先决定两件事：
+- **多用户部署：一人一个容器，共用一个 Ollama**（2026-11-04 讨论）。现在的设计不用改代码就能这样跑，要补的是部署文件和说明：
+  - **结构**：每个用户一个容器，各自挂一个数据卷作为 `data_dir`，各自一份 `config.toml`（用 `MORNING_BRIEF_CONFIG` 指向挂进来的文件），token 和用户 id 用环境变量。所有容器的 `ollama.host` 指向同一个 Ollama。
+  - **每个用户要有自己的 bot token**：Telegram 同一个 token 只能一个进程长轮询（第二个 409）；Discord 允许多个连接，但每个容器都会收到所有人的私信再各自忽略，既浪费又容易出错。人多到一人一个 bot 管不过来时，再改成一个进程服务多个用户（按用户 id 分数据目录、对话记忆和 `/city` 位置），这是不小的重构，到时单独规划。
+  - **Ollama 放在哪**：Mac 上的 Docker Desktop 用不了 GPU（Metal），所以 Ollama 在 Mac 本机运行，容器用 `http://host.docker.internal:11434` 连；Linux + NVIDIA 服务器上可以放进同一个 compose，用内部网络连（`http://ollama:11434`）。Ollama 没有身份验证，**不要把 11434 端口暴露到公网**。
+  - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的 `brief.time` 错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。
+  - **所有容器用同一个模型名和相同的 `num_ctx`**：模型名不同或 `num_ctx` 不同，Ollama 会反复卸载、重新加载模型，非常慢。`keep_alive` 按最长的设置。
+  - **待办和 Obsidian**：`todo.md` 在容器的数据卷里；想用 Obsidian 编辑，要把那个文件挂进容器，或者只通过机器人管理。
+  - **要做的事**：`Dockerfile`（`node:24-slim`，`npm ci --omit=dev` 之外要保留 `tsx`，非 root 用户运行，`STOPSIGNAL SIGTERM`）、`docker-compose.example.yml`（两个用户示例 + 可选的 Ollama 服务）、README 里的多用户部署说明；然后实测两三个容器同时生成早报的排队时间和内存占用。
+- **部署到服务器**：加 Dockerfile 和 systemd unit 示例（多用户时见上一条）。迁移前要先决定两件事：
   - **模型放在哪里**：（a）服务器只跑机器人和定时任务，通过 Tailscale 等私有网络调用家里 Mac 上的 Ollama（模型仍在本地，但 Mac 必须醒着；连不上时走降级早报）；（b）租带 GPU 的服务器自己跑 Ollama（数据不出自己的机器，但费用高）；（c）改用云端模型 API（便宜、稳定，但违背“推理完全在本机”的初衷，日程和待办会发给模型服务商）。
   - **待办文件怎么同步**：服务器上的 `todo.md` 不再和本机 Obsidian 是同一个文件。可以只通过机器人管理待办，或者用 git、Syncthing 同步，需要处理两边同时修改的冲突。

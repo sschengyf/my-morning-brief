@@ -2,7 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
-import { eventsOnDay, fetchCalendar, formatEvents } from '../../src/sources/calendar.js';
+import { eventsOnDay } from '../../src/sources/calendar/expand.js';
+import { fetchCalendar } from '../../src/sources/calendar/fetch.js';
+import { formatEvents } from '../../src/sources/calendar/format.js';
 
 const AUCKLAND = 'Pacific/Auckland';
 

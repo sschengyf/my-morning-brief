@@ -2,13 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  cleanSummary,
-  fetchNews,
-  formatNews,
-  normalizeLink,
-  numberNews,
-} from '../../src/sources/news.js';
+import { cleanSummary, normalizeLink } from '../../src/sources/news/clean.js';
+import { fetchNews } from '../../src/sources/news/fetch.js';
+import { formatNews, numberNews } from '../../src/sources/news/format.js';
 
 // The fixtures were captured at about 07:20 on 3 Nov 2026, Auckland time.
 const CAPTURED = DateTime.fromISO('2026-11-03T07:20', { zone: 'Pacific/Auckland' });

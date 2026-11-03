@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { toDiscordMessages } from '../../src/chat/discord.js';
-import { splitMessage } from '../../src/chat/split.js';
+import { toDiscordMessages } from '../../src/chat/discord/format.js';
+import { splitMessage } from '../../src/chat/split-message.js';
 import {
   markdownToTelegramHtml,
   splitForTelegram,
   TELEGRAM_LIMIT,
-} from '../../src/chat/telegramFormat.js';
+} from '../../src/chat/telegram/format.js';
 
 /** Every opening tag has its closing tag, in order. */
 function balanced(html: string): boolean {

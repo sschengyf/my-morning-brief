@@ -2,8 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach } from 'vitest';
-import { parseConfig, type Config } from '../src/config.js';
-import type { Logger } from '../src/logger.js';
+import { parseConfig } from '../src/infra/config/parse.js';
+import type { Config } from '../src/infra/config/schema.js';
+import type { Logger } from '../src/infra/logger.js';
 
 const tempDirs: string[] = [];
 

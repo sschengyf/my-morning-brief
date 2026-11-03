@@ -2,8 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
-import type { Location } from '../../src/location.js';
-import { describeWeatherCode, fetchWeather } from '../../src/sources/weather.js';
+import type { Location } from '../../src/location/effective.js';
+import { describeWeatherCode } from '../../src/sources/weather/codes.js';
+import { fetchWeather } from '../../src/sources/weather/fetch.js';
 
 const AUCKLAND: Location = {
   city: 'Auckland',

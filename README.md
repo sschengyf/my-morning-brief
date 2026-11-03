@@ -17,6 +17,8 @@
 
 ## 设计说明
 
+代码按模块分目录，每个模块只通过 `index.ts` 对外，依赖只能指向更底层的模块；完整的目录说明和规则见 PLAN.md 第 3 节，`npm run lint` 会检查。
+
 ### 日历库：node-ical
 
 阶段 2 开始前对比了 `node-ical` 0.27.3 和 `ical.js` 2.2.1（2026-11-03），fixture 在 `test/fixtures/calendar/`，在 `TZ=UTC` 和 `TZ=Pacific/Auckland` 下各跑一遍：
@@ -31,11 +33,11 @@
 
 选用 node-ical：全部通过，而且结果不依赖运行机器的时区，符合“可移植性”的要求。它的 `expandRecurringEvent()` 自带 EXDATE 和 RECURRENCE-ID 处理。
 
-node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）按运行机器的时区解析。`calendar.ts` 用本地时间字段把它们读回来，再放到当前生效的时区里重新计算，并用前后各放宽两天的窗口展开重复事件，最后自己按“与今天有重叠”过滤。测试在 `TZ=UTC`、`Pacific/Auckland`、`America/Los_Angeles`、`Asia/Kolkata` 下结果都一样。状态为 `CANCELLED` 的事件不显示。
+node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）按运行机器的时区解析。`sources/calendar/expand.ts` 用本地时间字段把它们读回来，再放到当前生效的时区里重新计算，并用前后各放宽两天的窗口展开重复事件，最后自己按“与今天有重叠”过滤。测试在 `TZ=UTC`、`Pacific/Auckland`、`America/Los_Angeles`、`Asia/Kolkata` 下结果都一样。状态为 `CANCELLED` 的事件不显示。
 
 ### 新闻
 
-- `news.ts` 只抓取，返回全部候选；新闻编号 `N1`、`N2`…… 在挑选之后由 `numberNews()` 分配，所以编号总是连续的，只覆盖交给模型的那几条。
+- `sources/news/` 只抓取，返回全部候选；新闻编号 `N1`、`N2`…… 在挑选之后由 `numberNews()` 分配，所以编号总是连续的，只覆盖交给模型的那几条。
 - hnrss 的摘要只有 `Article URL`、`Points` 这些元数据，清理后为空的条目标记为“只有标题”，给模型的文本里写“（只有标题）”。
 - 链接规范化时去掉 `utm_*`、`at_*`（BBC 加的）、`fbclid`、`gclid`、`mc_cid`、`mc_eid` 和末尾的 `/`。
 - BBC 中文简体 feed（`/zhongwen/simp/rss.xml`）在 2026-11-03 已经 301 跳转到繁体 feed，`fetch` 会自动跟随；模型照样用简体写早报。
@@ -48,7 +50,7 @@ node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）�
 
 ### 提示注入
 
-`gather.ts` 把各小节内容里出现的 `<数据`、`</数据` 换成全角 `＜`，这样日历标题或新闻里写的 `</数据>` 不能提前结束数据小节。
+`sources/gather.ts` 把各小节内容里出现的 `<数据`、`</数据` 换成全角 `＜`，这样日历标题或新闻里写的 `</数据>` 不能提前结束数据小节。
 
 ### 模型输出清理
 
@@ -79,7 +81,7 @@ node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）�
 
 ### 聊天渠道
 
-- Telegram 和 Discord 共用 `chat/commands.ts` 里的命令和对话逻辑；`chat/telegram.ts`、`chat/discord.ts` 只负责收发和检查发送者。
+- Telegram 和 Discord 共用 `chat/core/` 里的命令和对话逻辑；`chat/telegram/`、`chat/discord/` 只负责收发和检查发送者。
 - 只处理主人本人的私聊/私信，群组、服务器频道和陌生人的消息一律忽略（记日志，不回复）。主人 id 没配置时，谁发消息都只回复对方的 id。
 - Discord 的用户 ID 超出 JS 能精确表示的整数范围，所以配置里是字符串。
 - Discord 的 slash 命令只允许在和机器人的私信里用；以 `/` 开头的普通文字也按命令处理。slash 命令要在 3 秒内确认，所以先 `deferReply`，生成完再编辑回复。

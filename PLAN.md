@@ -38,39 +38,61 @@
 ```
 my-morning-brief/
 ├── src/
-│   ├── index.ts            # 入口：解析命令行参数，启动机器人和定时器
-│   ├── config.ts           # 读取并校验 config.toml，导出类型化的 Config
-│   ├── logger.ts           # 带时间戳的日志，统一脱敏 token 和日历链接
-│   ├── fsUtil.ts           # writeFileAtomic、data_dir 初始化、临时文件清理
-│   ├── state.ts            # state.json 读写
-│   ├── location.ts         # 当前生效的时区和天气位置（location.json 覆盖 config）、城市查询
-│   ├── sources/
-│   │   ├── weather.ts      # Open-Meteo 天气
-│   │   ├── calendar.ts     # .ics 订阅
-│   │   ├── todos.ts        # 本地 Markdown 待办文件
-│   │   ├── news.ts         # RSS 抓取
-│   │   └── gather.ts       # 汇总成一段给模型看的文本
-│   ├── llm.ts              # LlmClient 接口、Ollama 实现、提示词、输出清理
-│   ├── newsSelect.ts       # 新闻跨天去重和挑选（第一批按源轮流，第二批加模型按兴趣筛选）
-│   ├── archive.ts          # 每日原始数据和早报归档、按日期查询、过期清理
-│   ├── brief.ts            # 早报完整流程，供定时器、/brief、brief:once、brief:dry 共用
+│   ├── index.ts                # 入口：解析命令行参数，交给 app/
+│   ├── app/                    # 三种运行方式：start.ts、once.ts（brief:once）、dry.ts（brief:dry），setup.ts 是共用的启动准备
+│   ├── infra/                  # 基础设施，和业务无关
+│   │   ├── config/             #   schema.ts（zod 校验）、load.ts（读文件、环境变量覆盖）、parse.ts、paths.ts、secrets.ts
+│   │   ├── logger.ts           #   带时间戳的日志，统一脱敏 token 和日历链接
+│   │   ├── fs.ts               #   writeFileAtomic、data_dir 初始化、临时文件清理
+│   │   ├── lock.ts             #   单实例锁 app.lock
+│   │   └── state.ts            #   state.json 读写
+│   ├── location/               # effective.ts（当前生效的时区和位置，location.json 覆盖 config）、geocoding.ts（城市查询）
+│   ├── sources/                # 数据源
+│   │   ├── weather/            #   fetch.ts（Open-Meteo）、codes.ts（天气代码、紫外线等级）、format.ts、types.ts
+│   │   ├── calendar/           #   fetch.ts、expand.ts（展开重复日程、时区修正）、format.ts、types.ts
+│   │   ├── todos/              #   store.ts（读写 Markdown 待办文件）、source.ts
+│   │   ├── news/               #   fetch.ts（RSS/Atom）、clean.ts（摘要清理、链接规范化）、format.ts（编号）、types.ts
+│   │   ├── gather.ts           #   汇总成一段给模型看的文本（<数据> 标记）
+│   │   └── common.ts           #   SourceResult、fetchOk、describeError
+│   ├── llm/
+│   │   ├── prompts.ts          #   早报和对话的提示词
+│   │   ├── ollama.ts           #   Ollama 客户端、启动检查
+│   │   ├── service.ts          #   请求排队、写早报、回答问题、输入长度控制
+│   │   ├── sanitize.ts         #   输出清理、新闻编号换成链接
+│   │   └── types.ts            #   LlmClient 接口、ChatMessage、LlmError
+│   ├── archive/                # 每日归档：archive.ts（读写、按日期查询、过期清理）、front-matter.ts、types.ts
+│   ├── brief/                  # 早报业务
+│   │   ├── run.ts              #   runBrief：早报完整流程，定时器、/brief、brief:once、brief:dry 共用
+│   │   ├── data-sources.ts     #   Sources 接口（测试里可以替换）
+│   │   ├── select-news.ts      #   新闻跨天去重和挑选（第一批按源轮流，第二批加模型按兴趣筛选）
+│   │   └── fallback.ts         #   不经过模型的降级早报
 │   ├── chat/
-│   │   ├── channel.ts      # Channel 接口，早报和定时器只通过它发送
-│   │   ├── commands.ts     # 和平台无关的命令、对话、权限逻辑
-│   │   ├── telegram.ts     # grammY 适配
-│   │   ├── telegramFormat.ts  # Markdown → Telegram HTML、长消息分段
-│   │   └── discord.ts      # discord.js 适配（只处理私信）
-│   └── scheduler.ts        # 每日定时 + 补发逻辑
-├── test/                   # vitest 测试和 fixtures（示例 .ics、RSS、天气和城市查询 JSON）
+│   │   ├── channel.ts          #   Channel 接口、多渠道发送；早报和定时器只通过它发送
+│   │   ├── dispatch.ts         #   只服务主人的检查、首次配置回复
+│   │   ├── split-message.ts    #   长消息分段
+│   │   ├── core/               #   和平台无关：chat-core.ts（命令分发、/brief、聊天）、commands/（todo、location、history）、
+│   │   │                       #   conversation.ts（当天早报和对话记忆）、day-data.ts（数据缓存）、menu.ts、parse.ts、display.ts、links.ts
+│   │   ├── telegram/           #   adapter.ts（grammY）、send.ts、format.ts（Markdown → Telegram HTML）
+│   │   └── discord/            #   adapter.ts（discord.js，只处理私信）、slash-commands.ts、format.ts
+│   └── scheduler/              # 阶段 6：每日定时 + 补发逻辑
+├── test/                       # 目录结构和 src/ 对应；fixtures/ 里是示例 .ics、RSS、天气和城市查询 JSON
 ├── config.example.toml
-├── todo.example.md         # 待办文件示例；真正的 todo.md 在 data_dir 下，不提交 git
+├── data/                       # 程序产生的数据（paths.data_dir 的默认值），不提交 git
+├── todo.example.md             # 待办文件示例；真正的 todo.md 在 data/ 下
 ├── scripts/install-autostart.sh
 ├── package.json
 ├── tsconfig.json
-└── README.md               # 中文
+└── README.md                   # 中文
 ```
 
-运行时数据（`state.json`、`location.json`、`todo.md`、`archive/`、`logs/`）都在 `paths.data_dir` 下，默认就是项目目录。
+**模块规则**（`eslint.config.js` 里的 `local/module-boundaries` 自动检查）：
+
+- `src/` 下每个顶层目录是一个模块。别的模块只能通过它的 `index.ts` 引用它，不能直接引用它内部的文件；`index.ts` 只导出别的模块真正用到的东西。模块内部的文件互相直接引用。
+- 依赖只能指向更底层的模块：`infra → location → sources → llm → archive → brief → chat → scheduler → app`（左边最底层）。比如 `llm` 不能引用 `brief`，`sources` 不能引用 `llm`。新加模块时要把它放进这个顺序。
+- 文件和目录名用小写短横线（kebab-case），例如 `select-news.ts`、`chat-core.ts`。
+- 测试可以直接引用模块内部的文件，方便单独测一个函数。
+
+程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`logs/`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
 
 `package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但**不**更新 `lastBriefDate`，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
 
@@ -78,7 +100,7 @@ my-morning-brief/
 
 ```toml
 [paths]
-data_dir = "."   # state.json、location.json、todo.md、archive/、logs/ 的根目录；相对路径按项目根目录解析。服务器上可以指向挂载卷
+data_dir = "data"   # 程序产生的所有数据（state.json、location.json、todo.md、archive/、logs/、app.lock）都在这里；相对路径按项目根目录解析。Docker 把数据卷挂到这个目录
 
 # 聊天渠道：至少开一个。两个都开时，早报两边都发；在哪边提问就在哪边回复
 [telegram]
@@ -150,12 +172,12 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 #### 阶段 1：项目骨架、配置和持久化基础
 
 - 初始化项目：`git init`、package.json、tsconfig（strict、ESM、NodeNext）、eslint、prettier、vitest、.gitignore。
-- `config.ts`：用 zod 定义 schema，提供默认值，校验失败时打印中文错误（比如“缺少 telegram.bot_token”）。`config.toml` 不存在时提示“请先复制 config.example.toml 为 config.toml”。还要校验 `brief.catch_up_until` 晚于 `brief.time`，时区是 luxon 能识别的有效 IANA 时区。环境变量覆盖和 `MORNING_BRIEF_CONFIG` 也在这里实现（见第 6 节“可移植性”）。
-- `logger.ts`：带时间戳，分 info、warn、error 三级，只写 stdout/stderr。所有输出（包括错误对象的 message 和 stack）都要经过脱敏：把 Telegram 和 Discord 的 bot token、每个 ics 链接和 `healthcheck_url` 替换成 `***`。grammY 的网络错误里会带 `https://api.telegram.org/bot<token>/...`，所以不能只靠“注意别打印”。
-- `fsUtil.ts`、`state.ts`：按第 6 节“数据持久化”实现原子写入、`data_dir` 初始化、启动时清理残留临时文件、`state.json` 读写和损坏恢复。
-- `location.ts`：按第 6 节“位置和时区”实现 `getEffectiveLocation()`、`setLocationOverride()`、`clearLocationOverride()` 和 `searchCity(name, country?)`。后面所有需要时区或天气位置的地方都通过 `getEffectiveLocation()` 获取，不直接读 `config.brief.timezone`。
+- `infra/config/`：用 zod 定义 schema，提供默认值，校验失败时打印中文错误（比如“缺少 telegram.bot_token”）。`config.toml` 不存在时提示“请先复制 config.example.toml 为 config.toml”。还要校验 `brief.catch_up_until` 晚于 `brief.time`，时区是 luxon 能识别的有效 IANA 时区。环境变量覆盖和 `MORNING_BRIEF_CONFIG` 也在这里实现（见第 6 节“可移植性”）。
+- `infra/logger.ts`：带时间戳，分 info、warn、error 三级，只写 stdout/stderr。所有输出（包括错误对象的 message 和 stack）都要经过脱敏：把 Telegram 和 Discord 的 bot token、每个 ics 链接和 `healthcheck_url` 替换成 `***`。grammY 的网络错误里会带 `https://api.telegram.org/bot<token>/...`，所以不能只靠“注意别打印”。
+- `infra/fs.ts`、`infra/state.ts`：按第 6 节“数据持久化”实现原子写入、`data_dir` 初始化、启动时清理残留临时文件、`state.json` 读写和损坏恢复。
+- `location/`：按第 6 节“位置和时区”实现 `getEffectiveLocation()`、`setLocationOverride()`、`clearLocationOverride()` 和 `searchCity(name, country?)`。后面所有需要时区或天气位置的地方都通过 `getEffectiveLocation()` 获取，不直接读 `config.brief.timezone`。
 
-**验收**：`npm run typecheck`、`npm run lint`、`npm test` 都通过；配置校验有测试，覆盖正常配置、缺字段、类型错误、`catch_up_until` 早于 `time`、环境变量覆盖。logger 脱敏有测试，覆盖包含 token 的错误 stack。`writeFileAtomic` 有测试，覆盖正常写入、写入中途抛错时原文件不变且临时文件被清理。`state.json` 损坏时能正常启动并保留损坏文件。`location.ts` 有测试，覆盖没有覆盖文件时用 config、有覆盖时用覆盖、清除后恢复、覆盖文件损坏时退回 config 并记 warn；`searchCity` 用 fixture 测试，覆盖英文城市名、按国家过滤、国家字段为空（如 Hong Kong）、没有结果。
+**验收**：`npm run typecheck`、`npm run lint`、`npm test` 都通过；配置校验有测试，覆盖正常配置、缺字段、类型错误、`catch_up_until` 早于 `time`、环境变量覆盖。logger 脱敏有测试，覆盖包含 token 的错误 stack。`writeFileAtomic` 有测试，覆盖正常写入、写入中途抛错时原文件不变且临时文件被清理。`state.json` 损坏时能正常启动并保留损坏文件。`location/` 有测试，覆盖没有覆盖文件时用 config、有覆盖时用覆盖、清除后恢复、覆盖文件损坏时退回 config 并记 warn；`searchCity` 用 fixture 测试，覆盖英文城市名、按国家过滤、国家字段为空（如 Hong Kong）、没有结果。
 
 #### 阶段 2：数据源
 
@@ -164,7 +186,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 **先做日历库验证**：重复事件加时区是本项目最容易出错的部分（`node-ical` 依赖的 rrule 库在时区处理上有已知问题）。开始写 calendar.ts 之前，先用两个 fixture——奥克兰夏令时切换日的每日重复事件、带 RECURRENCE-ID 改期的每周重复事件——分别测试 `node-ical` 和 `ical.js`，选能正确通过的那个；都能通过时选 API 更简单的。把结果写进 README 的“设计说明”。
 
 1. **weather.ts**：Open-Meteo `/v1/forecast`，**必须传 `timezone` 参数为当前生效时区**（否则每日最高最低温和分时数据按 UTC 切分，“今天”会错位）。取当前天气（温度、体感、天气代码、风速）、今天和明天的最高最低温、最大降水概率、紫外线指数、日出日落，以及今天 6/9/12/15/18/21 点的分时数据。WMO 天气代码要映射成中文（晴、多云、小雨、雷暴……）。
-2. **calendar.ts**：逐个下载 .ics，取出与当前生效时区“今天”`[0:00, 次日 0:00)` **有重叠**的事件（不是只看开始时间，否则昨天开始、今天结束的事件和多天事件会被漏掉）。“今天”的边界用 luxon `startOf('day')` 计算，夏令时切换日当天是 23 或 25 小时。要求：
+2. **sources/calendar/**：逐个下载 .ics，取出与当前生效时区“今天”`[0:00, 次日 0:00)` **有重叠**的事件（不是只看开始时间，否则昨天开始、今天结束的事件和多天事件会被漏掉）。“今天”的边界用 luxon `startOf('day')` 计算，夏令时切换日当天是 23 或 25 小时。要求：
    - 正确展开重复事件，并处理 EXDATE 和 RECURRENCE-ID 改期；
    - 带时区的时间、UTC 时间、浮动时间都换算到当前生效时区；
    - 全天事件（`VALUE=DATE`）按日期直接比较，**不做时区换算**；DTEND 是不包含的结束日期；
@@ -174,20 +196,20 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 3. **todos.ts**：待办存在 Markdown 文件里，格式是 `- [ ] 内容` 和 `- [x] 内容`。文件不存在时自动创建，内容为 `# 待办` 加一个空行。提供 `listTodos`、`addTodo`、`completeTodo(序号)`、`formatTodos`。序号指未完成待办列表里的位置（从 1 开始），按文件里的顺序。
    - 写文件时用 `writeFileAtomic`，保留文件中的其他内容（标题、空行、别的笔记）和原有换行符（LF 或 CRLF），因为用户可能用 Obsidian 编辑同一个文件。每次操作前都重新读文件；`completeTodo` 返回被完成的那一项的内容，这样文件在两次命令之间被外部修改、序号错位时，用户能从回复里看出来。
    - 行里的其他内容（比如 Obsidian Tasks 插件的 `📅 2026-11-05`）原样保留、原样显示，第一批不解析（截止日期在阶段 8）。
-4. **news.ts**：只负责抓取，返回全部候选新闻的结构化列表；去重和挑选在阶段 3 的 `newsSelect.ts` 里做。
+4. **sources/news/**：只负责抓取，返回全部候选新闻的结构化列表；去重和挑选在阶段 3 的 `brief/select-news.ts` 里做。
    - 每个 RSS 源取前 `max_items_per_feed` 条，提取标题、链接、发布时间，以及去掉 HTML 标签后截断到 200 字的摘要。请求带 User-Agent。
    - **去掉摘要里的元数据**：hnrss 的摘要只有 `Article URL: …`、`Comments URL: …`、`Points: …`、`# Comments: …` 这几行，没有正文。去掉这类行以及摘要里所有裸 URL；清理后为空的条目标记为“只有标题”。（2026-11-03 实测：把 hnrss 摘要原样交给模型，它只能写出“获得 777 个赞和 394 条评论”，还会根据点赞数自己加上“引发广泛关注”。）
    - **按发布时间过滤**：去掉发布时间早于 `max_age_hours` 的条目，没有发布时间的条目保留。像博客这类 feed 里会包含几个月甚至几年前的文章，不过滤的话它们会被当成“今天的新闻”。
    - **每个源单独容错**：一个源失败只在新闻小节里注明“（RNZ 获取失败：原因）”，其他源照常；所有源都失败时整个小节 `ok` 为 false。
    - 链接做规范化：去掉 `utm_*` 等跟踪参数和末尾的 `/`。同一次抓取里多个源出现同一个链接时只保留一条。
    - 每条新闻分配一个编号 `N1`、`N2`……，给模型的文本里只写编号、来源、标题和摘要，**不写链接**；编号到链接的映射单独返回，由代码在模型输出后替换（见阶段 3）。本地模型抄写长 URL 时经常改错字符。
-5. **gather.ts**：拼成一段文本，包含日期（“2026年11月2日 星期一，现在 08:00”，按当前生效时区；不在家时加上城市名，例如“Shanghai 时间”）和天气、日程、待办、新闻四个小节。新闻小节只包含挑选后的新闻（由调用方传入）。周末且 `weekend_news = false` 时不抓新闻、不包含新闻小节。四个小节分别用 `<数据 类型="日程">…</数据>` 这样的标记包起来，配合提示词里的规则，让模型把其中的文字当作数据而不是指令（见阶段 3“提示注入”）。
+5. **sources/gather.ts**：拼成一段文本，包含日期（“2026年11月2日 星期一，现在 08:00”，按当前生效时区；不在家时加上城市名，例如“Shanghai 时间”）和天气、日程、待办、新闻四个小节。新闻小节只包含挑选后的新闻（由调用方传入）。周末且 `weekend_news = false` 时不抓新闻、不包含新闻小节。四个小节分别用 `<数据 类型="日程">…</数据>` 这样的标记包起来，配合提示词里的规则，让模型把其中的文字当作数据而不是指令（见阶段 3“提示注入”）。
 
 **验收**：每个数据源都有基于 fixture 的测试，网络全部 mock。日历测试至少覆盖：UTC 事件换算成奥克兰时间、每天重复的事件、被 EXDATE 排除的一天、RECURRENCE-ID 改期、全天事件、多天全天事件、昨天开始今天结束的事件、跨时区事件、新西兰夏令时切换当天，以及传入 `Asia/Shanghai` 时同一个事件按上海时间显示。天气测试检查请求 URL 带了 `timezone`。新闻测试覆盖一个源失败、其他源正常、按发布时间过滤、没有发布时间时保留、链接规范化、同一链接跨源去重、hnrss 摘要的元数据被去掉并标记为“只有标题”。待办测试覆盖增删、保留其他内容和换行符、带 `📅` 的行原样保留、文件不存在时自动创建。
 
 #### 阶段 3：本地模型
 
-`llm.ts`：
+`llm/`：
 
 - 定义 `LlmClient` 接口（`chat(messages, options)`），实现 Ollama 版本：通过 ollama-js 的 chat 接口调用，传入 `keep_alive`，`options` 里传 `temperature` 和 `num_ctx`，并设置超时。
 - **启动检查**：检查 Ollama 是否在运行、配置的模型是否已下载；如果没有，给出中文提示（例如“请先运行 ollama pull <配置里的模型名>”）。比较模型名时，没写标签的名字等同于 `:latest`（`qwen3` 和 `qwen3:latest` 是同一个）。同时用 `ollama show` 读取模型的能力列表：包含 `thinking` 时才传 `think` 参数，否则不传。（2026-11-02 在 Ollama 0.40.3 上实测：对不支持思考的 `qwen2.5-coder:32b` 传 `think: true` 会报错 `does not support thinking`，传 `false` 正常；为了不依赖这个行为，一律按能力列表决定传不传。）
@@ -197,7 +219,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - **提示注入**：日历事件标题任何人都能写（给你发一个会议邀请就行），RSS 内容也来自外部，它们都会进入模型输入。现在模型没有工具权限，主要风险是它在回复里写出恶意链接，而 Telegram 和 Discord 都会把网址显示成可点击的。所以模型输出（早报和聊天回复）先删掉其中所有 URL 和 Markdown 链接（只保留链接文字），**然后**再把新闻编号 `[N3]` 替换成 `[原文](真实链接)`；模型写出的不存在的编号直接删掉。最终消息里的链接只能来自新闻编号映射。
 - 用一个简单的队列或互斥锁保证同一时间只有一个模型请求，避免定时早报和聊天抢资源。提供 `isBusy()` 和当前任务类型，供机器人提示用户排队（见阶段 5）。
 
-`newsSelect.ts`，`selectNews(candidates, excludeLinks, config)`，在写早报之前执行，第一批**不调用模型**：
+`brief/select-news.ts`，`selectNews(candidates, excludeLinks, config)`，在写早报之前执行，第一批**不调用模型**：
 
 1. **跨天去重**：从候选里去掉 `excludeLinks` 里的链接（由调用方从归档读取，见阶段 4）。
 2. **按源轮流挑选**：按源轮流各取一条（每个源内部按发布时间从新到旧），直到凑满 `select_count` 或候选用完。这样每个源都有机会出现，不会被条目多的源占满。
@@ -247,7 +269,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 #### 阶段 4：归档和早报流程
 
-`archive.ts`，写归档失败只记日志，不影响发送：
+`archive/`，写归档失败只记日志，不影响发送：
 
 - 归档目录按当前生效时区的日期命名，例如 `archive/2026-11-02/`，其中保存：
   - `raw.json`：各数据源的结构化原始数据、是否成功、抓取时间，以及新闻编号到链接的映射；新闻部分还要记录全部候选、因发布时间过滤和跨天去重去掉的、挑选出的编号、最终早报里用到的编号，以及挑选方式，方便以后检查；
@@ -259,7 +281,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - `recentSelectedNewsLinks(days)`：读取最近几天（不含今天）所有 `raw.json`（包括手动的）里**最终早报用到的**新闻的规范化链接，供新闻挑选去重。读取或解析失败的文件跳过并记 warn，不能让早报失败。
 - 每天定时早报发出后，删除早于 `retention_days` 的日期目录。
 
-`brief.ts`，`runBrief({ kind, send, archive })`：早报的完整流程，定时器、`/brief`、`brief:once`、`brief:dry` 都调用它，不各自拼流程：
+`brief/run.ts`，`runBrief({ kind, send, archive })`：早报的完整流程，定时器、`/brief`、`brief:once`、`brief:dry` 都调用它，不各自拼流程：
 
 1. `getEffectiveLocation()` 取时区和位置；
 2. 并发抓取四个数据源；
@@ -276,10 +298,10 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 两个渠道都支持，在 config.toml 里各自用 `enabled` 开关。命令、对话和权限逻辑只写一份，渠道适配层只负责收发消息：
 
-- `chat/commands.ts`：和平台无关的核心。输入是“哪个渠道、发送者是不是主人、文字内容”，输出是要回复的 Markdown 文本。下面所有命令、`/city`、对话记忆、忙碌提示都在这里实现，测试主要测这一层。
+- `chat/core/`：和平台无关的核心。输入是“哪个渠道、发送者是不是主人、文字内容”，输出是要回复的 Markdown 文本。下面所有命令、`/city`、对话记忆、忙碌提示都在这里实现，测试主要测这一层。
 - `chat/channel.ts`：`Channel { name; ready; start(); stop(); send(markdown) }`。早报、`brief:once` 和定时器只通过这个接口发送，不关心平台。`ready` 表示 token 有效且已经配置了主人 id。
 - 两个渠道都开时：早报发给每个 `ready` 的渠道；普通消息和命令在哪个渠道收到，就回复到哪个渠道。对话记忆两边共用（是同一个人）。
-- **配置**：`config.ts` 加上 `[discord]` 和两个 `enabled`（默认都是 false，示例配置里明确写出）。启动 `start` / `brief:once` 时至少要开一个渠道，开了的渠道 token 不能是占位符；`brief:dry` 不检查渠道。
+- **配置**：`infra/config/` 加上 `[discord]` 和两个 `enabled`（默认都是 false，示例配置里明确写出）。启动 `start` / `brief:once` 时至少要开一个渠道，开了的渠道 token 不能是占位符；`brief:dry` 不检查渠道。
 - **先做 Discord**：用户现在用不了 Telegram，Discord 可以实际验证；Telegram 适配照样实现并有单元测试，等能用时再做真机验证。
 
 **共同规则**（两个渠道都一样）：
@@ -288,13 +310,13 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - **只服务主人**：只处理**私聊/私信**里主人本人发来的消息；其他消息（包括群消息、Discord 服务器频道里的消息、别人的私信）一律忽略，并记一条日志。
 - **同时只能运行一个实例**：启动时在 `data_dir` 写 `app.lock`（内容是 pid）。锁文件存在且那个 pid 还活着就退出，并提示“另一个实例正在运行（可能是开机自启的那个），请先停掉其中一个”；pid 已经不存在就接管。Telegram 有 409 Conflict 兜底，但 Discord 允许同一个 token 多个连接，两个实例会各回复一遍，所以必须自己加锁。
 
-**Telegram**（`chat/telegram.ts`，grammY 长轮询）：
+**Telegram**（`chat/telegram/`，grammY 长轮询）：
 
 - 只处理私聊且 `chat.id` 和 `from.id` 都等于 chat_id 的消息，用 grammY 中间件实现。
 - 启动时通过 `setMyCommands` 注册命令菜单（命令表见下）。
-- 回复用 `telegramFormat.ts` 转换（见下）。
+- 回复用 `chat/telegram/format.ts` 转换（见下）。
 
-**Discord**（`chat/discord.ts`，discord.js）：
+**Discord**（`chat/discord/`，discord.js）：
 
 - 在 Discord Developer Portal 创建应用和 Bot，token 填进 `discord.bot_token`。intents 只要 `DirectMessages`，并加上 `Partials.Channel`，否则收不到私信事件。私信内容不需要特权 intent `MessageContent`。
 - 用户和机器人必须至少在一个共同服务器里才能发起私信：自己建一个空服务器，把 bot 邀请进去。README 写清楚步骤。
@@ -333,7 +355,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - 对话记忆保留最近 10 轮。每次发送早报后，把早报本身作为第一条 assistant 消息放进对话记忆。对话记忆只在内存里；**启动时**如果归档里有今天的早报，就把它加载为第一条 assistant 消息，这样重启后仍然可以接着问。
 - 模型生成期间持续发送“正在输入”状态（Telegram 每 4 秒一次；Discord 每 8 秒 `sendTyping()` 一次，它的状态维持约 10 秒），直到回复发出。
 - 用户发消息时如果模型正在忙（`isBusy()`），先回复一句“正在生成早报，稍后回复你”（或者“上一个问题还在处理，稍等”），然后排队；回复发出后再停止 typing。正在生成早报时提的问题，要等早报**发出之后**再回答，并且用这份新早报的新闻作上下文（`ChatCore.trackBrief`，阶段 6 的定时早报也要用它）。
-- **telegramFormat.ts**：先把原始 Markdown 按段落切分，保证每段转换后不超过 4000 字符（单个段落过长时再按行切），**然后**再逐段转换：先对 HTML 转义，再把 `**粗体**`、`[文字](链接)`、`` `代码` ``、`# 标题` 转成 Telegram HTML。顺序不能反，否则可能把 `<a>` 标签切断导致解析失败。HTML 解析失败时退回纯文本重发。
+- **chat/telegram/format.ts**：先把原始 Markdown 按段落切分，保证每段转换后不超过 4000 字符（单个段落过长时再按行切），**然后**再逐段转换：先对 HTML 转义，再把 `**粗体**`、`[文字](链接)`、`` `代码` ``、`# 标题` 转成 Telegram HTML。顺序不能反，否则可能把 `<a>` 标签切断导致解析失败。HTML 解析失败时退回纯文本重发。
 - 网络断开时 grammY 自动重试，程序不能退出。
 - 同一个 bot token 同时只能有一个进程长轮询，否则 Telegram 返回 409 Conflict。收到 409 时记一条 error 日志，内容同上面的单实例提示。
 
@@ -341,7 +363,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 #### 阶段 6：定时与补发
 
-`scheduler.ts`：
+`scheduler/`：
 
 - 没有任何一个 `ready` 的渠道（都还没完成首次配置）时不启动定时器，只记一条 info 日志，否则会没有发送对象、白白耗光重试次数。
 - 发送：传给 `runBrief` 的 `send` 依次发给每个 `ready` 的渠道，有渠道失败时抛出带失败渠道名单的错误（成功的渠道不受影响）。
@@ -394,7 +416,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 #### 8.1 新闻按兴趣筛选
 
-在 `newsSelect.ts` 的跨天去重和按源轮流之间加一步：
+在 `brief/select-news.ts` 的跨天去重和按源轮流之间加一步：
 
 - 候选多于 `select_count` 时调用一次模型（超时用 `select_timeout_seconds`），输入只有每条的编号、来源和标题（不含摘要，几十条也很短），连同 `interests` 和 `avoid` 一起，让模型按“和兴趣相关程度 + 重要性”挑出 `select_count` 条，只输出编号列表，例如 `N3,N7,N12`。代码解析编号，忽略不存在的编号；解析出的有效编号少于一半时视为失败。
 - 筛选调用失败、超时或解析失败时不重试，退回第一批的按源轮流，并记一条 warn。新闻筛选失败不能导致整份早报失败。挑选方式记为 `model` 或 `round_robin_fallback`，写进归档。
@@ -425,7 +447,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 ## 6. 通用要求
 
 - 所有面向用户的文字（机器人回复、错误提示、README）都用简体中文；代码标识符和注释用英文。
-- 不要把 token、chat_id、Discord user_id、日历链接打印到日志里；所有日志都经过 `logger.ts` 统一脱敏（见阶段 1）。
+- 不要把 token、chat_id、Discord user_id、日历链接打印到日志里；所有日志都经过 `infra/logger.ts` 统一脱敏（见阶段 1）。
 - 日志带时间戳，级别分 info、warn、error。
 - 未捕获的错误：`unhandledRejection` 只记 error 日志，进程继续运行；`uncaughtException` 记 error 日志后以非零状态码退出，由 launchd（以后是 systemd 或 Docker）重启。因为 Node 在 `uncaughtException` 之后内部状态不可靠，继续运行可能出现隐蔽问题；状态都在文件里，重启不会重复发送早报。可以预见的错误（网络、模型、文件读写）都要在业务代码里捕获，不能依赖这两个兜底。
 - 依赖保持精简，不引入 Web 框架或数据库。
@@ -449,7 +471,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - **密钥可以走环境变量**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`、`DISCORD_BOT_TOKEN`、`DISCORD_USER_ID` 等环境变量优先于 config.toml，方便在服务器上用 secret 管理，不把 token 写进镜像。
 - **日志写到 stdout/stderr**：程序本身不写日志文件，由运行环境收集（launchd 重定向到文件，服务器上交给 systemd 或 Docker）。
 - **macOS 专属的东西隔离开**：`caffeinate`、launchd 脚本、`pmset` 说明只出现在各自的位置，并且按平台判断，主流程不依赖它们。
-- **模型调用走接口**：`llm.ts` 里的 `LlmClient` 接口，这次只实现 Ollama 版本。以后换成别的推理后端时只需要加一个实现，不改其他代码。
+- **模型调用走接口**：`llm/` 里的 `LlmClient` 接口，这次只实现 Ollama 版本。以后换成别的推理后端时只需要加一个实现，不改其他代码。
 - **优雅退出**：收到 SIGTERM/SIGINT 时停止长轮询、等当前的模型请求和文件写入完成（最多 30 秒）再退出。服务器和容器重启时会发这个信号。
 - **同一时间只跑一个实例**：迁移时先停掉 Mac 上的自启（`install-autostart.sh remove`），否则两边都会长轮询导致 409，还可能各发一份早报。`data_dir/app.lock` 只能防住同一个数据目录上的第二个实例，防不住两台机器各跑一个。
 - **一个实例只服务一个人**：所有状态（数据目录、对话记忆、模型请求队列、锁）都按实例隔离，不要引入跨实例共享的全局状态或固定路径，这样以后可以一人一个容器（见第 7 节“多用户部署”）。
@@ -459,7 +481,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 在阶段 1 实现：
 
 - 所有持久数据都是 `data_dir` 下的普通文件（`state.json`、`location.json`、`todo.md`、`archive/`），不用数据库。迁移时复制整个 `data_dir` 即可。
-- **原子写入**：`fsUtil.ts` 提供 `writeFileAtomic(path, content)`：先写同目录下的临时文件 `.<文件名>.<随机串>.tmp`，`fsync` 后 `rename` 覆盖目标文件。`state.json`、`location.json`、`todo.md` 和归档文件都必须通过它写入，这样进程在写到一半时被杀（服务器重启、容器更新、断电）也不会留下损坏的文件。临时文件放在同目录是为了保证 `rename` 不跨文件系统。
+- **原子写入**：`infra/fs.ts` 提供 `writeFileAtomic(path, content)`：先写同目录下的临时文件 `.<文件名>.<随机串>.tmp`，`fsync` 后 `rename` 覆盖目标文件。`state.json`、`location.json`、`todo.md` 和归档文件都必须通过它写入，这样进程在写到一半时被杀（服务器重启、容器更新、断电）也不会留下损坏的文件。临时文件放在同目录是为了保证 `rename` 不跨文件系统。
 - 启动时清理 `data_dir` 里残留的 `.*.tmp` 文件。
 - `state.json` 读取时如果 JSON 损坏，记一条 warn，改名为 `state.json.corrupt-<时间>` 保留现场，然后按空状态继续运行（最坏情况是当天多发一份早报），不能让进程启动失败。
 - `data_dir` 不存在时自动创建；没有写权限时启动失败并给出中文提示。
@@ -479,7 +501,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - X 平台：不接。官方 API 读取要付费，Nitter 和 RSSHub 的 X 路由需要真实账号 cookie，违反使用条款且不稳定。如果以后某个只在 X 上发的账号确实重要，再考虑用官方 API 加一种 `type = "x"` 的源。
 - **根据反馈学习新闻偏好**（依赖阶段 8.1）：早报里每条新闻后加 👍/👎 按钮（Telegram inline keyboard / Discord 按钮），反馈连同标题、来源记到 `data_dir/feedback.jsonl`（追加写入）。每周让模型根据反馈总结出新的 `interests`/`avoid` 建议，发给用户，用户点“采用”后才写入。学到的偏好单独存在 `data_dir/preferences.toml`，和手写的配置合并使用，不改 `config.toml`。
 - **多用户部署：一人一个容器，共用一个 Ollama**（2026-11-04 讨论）。现在的设计不用改代码就能这样跑，要补的是部署文件和说明：
-  - **结构**：每个用户一个容器，各自挂一个数据卷作为 `data_dir`，各自一份 `config.toml`（用 `MORNING_BRIEF_CONFIG` 指向挂进来的文件），token 和用户 id 用环境变量。所有容器的 `ollama.host` 指向同一个 Ollama。
+  - **结构**：每个用户一个容器，各自挂一个数据卷到容器里的 `data/`（`data_dir` 的默认值，例如 `/app/data`），各自一份 `config.toml`（用 `MORNING_BRIEF_CONFIG` 指向挂进来的文件），token 和用户 id 用环境变量。所有容器的 `ollama.host` 指向同一个 Ollama。
   - **每个用户要有自己的 bot token**：Telegram 同一个 token 只能一个进程长轮询（第二个 409）；Discord 允许多个连接，但每个容器都会收到所有人的私信再各自忽略，既浪费又容易出错。人多到一人一个 bot 管不过来时，再改成一个进程服务多个用户（按用户 id 分数据目录、对话记忆和 `/city` 位置），这是不小的重构，到时单独规划。
   - **Ollama 放在哪**：Mac 上的 Docker Desktop 用不了 GPU（Metal），所以 Ollama 在 Mac 本机运行，容器用 `http://host.docker.internal:11434` 连；Linux + NVIDIA 服务器上可以放进同一个 compose，用内部网络连（`http://ollama:11434`）。Ollama 没有身份验证，**不要把 11434 端口暴露到公网**。
   - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的 `brief.time` 错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。

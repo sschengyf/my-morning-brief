@@ -1,13 +1,18 @@
 node_modules/
 
-# Personal data and secrets: token, private calendar links, location, schedule, todos
-config.toml
-state.json
-app.lock
-state.json.corrupt-*
-location.json
-todo.md
-archive/
-logs/
+# Personal data and secrets: token, private calendar links, location, schedule, todos.
+# Anchored to the root, so source folders like src/archive/ are not caught.
+/config.toml
+# The data/ folder itself is kept (with its README); everything in it is ignored.
+/data/*
+!/data/README.md
+# The same files when paths.data_dir is set to "." (the old default)
+/state.json
+/app.lock
+/state.json.corrupt-*
+/location.json
+/todo.md
+/archive/
+/logs/
 
 .DS_Store

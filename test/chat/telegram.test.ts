@@ -1,9 +1,10 @@
 import { Bot, GrammyError } from 'grammy';
 import type { Update } from 'grammy/types';
 import { describe, expect, it, vi } from 'vitest';
-import type { ChatIO } from '../../src/chat/channel.js';
-import { sendTelegramMarkdown, TelegramChannel } from '../../src/chat/telegram.js';
 import { recordingLogger } from '../helpers.js';
+import type { ChatIO } from '../../src/chat/channel.js';
+import { TelegramChannel } from '../../src/chat/telegram/adapter.js';
+import { sendTelegramMarkdown } from '../../src/chat/telegram/send.js';
 
 const OWNER = 42;
 

@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { recordingLogger } from '../helpers.js';
 import {
-  dispatch,
-  SendError,
-  sendToChannels,
   type Channel,
   type ChannelName,
   type ChatIO,
-  type Incoming,
+  SendError,
+  sendToChannels,
 } from '../../src/chat/channel.js';
-import { recordingLogger } from '../helpers.js';
+import { dispatch, type Incoming } from '../../src/chat/dispatch.js';
 
 function io(): ChatIO & { replies: string[] } {
   const replies: string[] = [];

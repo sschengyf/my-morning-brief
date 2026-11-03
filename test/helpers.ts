@@ -19,7 +19,11 @@ export async function makeTempDir(): Promise<string> {
 
 export function minimalRawConfig(): Record<string, unknown> {
   return {
-    telegram: { bot_token: '123456789:AAEexampleexampleexampleexampleexample', chat_id: 42 },
+    telegram: {
+      enabled: true,
+      bot_token: '123456789:AAEexampleexampleexampleexampleexample',
+      chat_id: 42,
+    },
     ollama: { model: 'qwen3:32b' },
   };
 }

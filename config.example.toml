@@ -1,9 +1,16 @@
 [paths]
 data_dir = "."   # state.json、location.json、todo.md、archive/、logs/ 的根目录；相对路径按项目根目录解析。服务器上可以指向挂载卷
 
+# 聊天渠道：至少开一个。两个都开时，早报两边都发；在哪边提问就在哪边回复
 [telegram]
+enabled = false
 bot_token = "在这里填 BotFather 给你的 token"   # 也可以用环境变量 TELEGRAM_BOT_TOKEN 提供，环境变量优先
 chat_id = 0          # 先留 0，启动后给机器人发 /start 获取；也可以用环境变量 TELEGRAM_CHAT_ID
+
+[discord]
+enabled = true
+bot_token = "在这里填 Discord Developer Portal 里 Bot 页面的 token"   # 也可以用环境变量 DISCORD_BOT_TOKEN
+user_id = ""         # 你的 Discord 用户 ID，一串数字，要加引号。先留空，启动后私信机器人任意一句获取；也可以用环境变量 DISCORD_USER_ID
 
 [ollama]
 host = "http://localhost:11434"
@@ -19,7 +26,7 @@ time = "08:00"             # 按当前生效时区的当地时间发送
 weekend_news = true        # false 时周末早报不抓新闻，也不包含新闻小节
 catch_up_until = "12:00"   # 电脑睡过了发送时间，醒来后在这个时间之前仍补发；必须晚于 time，不支持跨午夜
 retry_minutes = [2, 5, 10] # 生成或发送失败后的重试间隔（仍受 catch_up_until 限制）
-# 以下是“家”的时区和位置。旅行时可以在 Telegram 里用 /city 临时切换，/home 恢复为这里的设置
+# 以下是“家”的时区和位置。旅行时可以在聊天里用 /city 临时切换，/home 恢复为这里的设置
 timezone = "Pacific/Auckland"
 city = "Auckland"
 latitude = -36.85

@@ -3,6 +3,7 @@ node_modules/
 # Personal data and secrets: token, private calendar links, location, schedule, todos
 config.toml
 state.json
+app.lock
 state.json.corrupt-*
 location.json
 todo.md

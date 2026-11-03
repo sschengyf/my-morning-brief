@@ -6,10 +6,10 @@
 
 一个常驻在 macOS 上的个人助手：
 
-- 每天定时（默认 08:00）抓取**天气、今日日程、待办、新闻**，交给**本地 Ollama 模型**整理成一份简短的中文早报，通过 **Telegram 机器人**推送（手机和电脑同步）。
-- 推送后可以在 Telegram 里**直接对话**：追问早报内容、问天气日程，以及管理待办。
+- 每天定时（默认 08:00）抓取**天气、今日日程、待办、新闻**，交给**本地 Ollama 模型**整理成一份简短的中文早报，通过 **Telegram 或 Discord 机器人**推送（手机和电脑同步；两个渠道可以只开一个，也可以同时开）。
+- 推送后可以在聊天软件里**直接对话**：追问早报内容、问天气日程，以及管理待办。
 - 模型推理完全在本机，不调用任何云端大模型 API。
-- 用户出门旅行时（Mac 留在奥克兰家里），可以在 Telegram 里**手动输入城市名**，切换早报的时区和天气位置。
+- 用户出门旅行时（Mac 留在奥克兰家里），可以在聊天软件里**手动输入城市名**，切换早报的时区和天气位置。
 
 运行环境：Apple M5 Pro，64GB 内存，macOS，时区 Pacific/Auckland（奥克兰）。
 
@@ -22,6 +22,7 @@
 | 运行时 | Node.js 22 LTS 或更新 | 用 `tsx` 直接运行 TS，不需要单独的构建步骤 |
 | 语言 | TypeScript，`strict: true`，ESM | |
 | Telegram | `grammy` | 长轮询模式（不用 webhook，家里电脑没有公网地址） |
+| Discord | `discord.js` | Gateway 连接，同样由本机主动连出去，不需要公网地址 |
 | 本地模型 | `ollama`（官方 ollama-js） | 调用 `http://localhost:11434` |
 | 日历 | `node-ical` 或 `ical.js`，阶段 2 开头通过验证测试选定一个 | 必须正确展开重复日程（RRULE、EXDATE、RECURRENCE-ID） |
 | RSS | `rss-parser` | 同时支持 RSS 和 Atom |
@@ -53,8 +54,12 @@ my-morning-brief/
 │   ├── newsSelect.ts       # 新闻跨天去重和挑选（第一批按源轮流，第二批加模型按兴趣筛选）
 │   ├── archive.ts          # 每日原始数据和早报归档、按日期查询、过期清理
 │   ├── brief.ts            # 早报完整流程，供定时器、/brief、brief:once、brief:dry 共用
-│   ├── bot.ts              # grammY 机器人、命令、对话
-│   ├── telegramFormat.ts   # Markdown → Telegram HTML、长消息分段
+│   ├── chat/
+│   │   ├── channel.ts      # Channel 接口，早报和定时器只通过它发送
+│   │   ├── commands.ts     # 和平台无关的命令、对话、权限逻辑
+│   │   ├── telegram.ts     # grammY 适配
+│   │   ├── telegramFormat.ts  # Markdown → Telegram HTML、长消息分段
+│   │   └── discord.ts      # discord.js 适配（只处理私信）
 │   └── scheduler.ts        # 每日定时 + 补发逻辑
 ├── test/                   # vitest 测试和 fixtures（示例 .ics、RSS、天气和城市查询 JSON）
 ├── config.example.toml
@@ -67,7 +72,7 @@ my-morning-brief/
 
 运行时数据（`state.json`、`location.json`、`todo.md`、`archive/`、`logs/`）都在 `paths.data_dir` 下，默认就是项目目录。
 
-`package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但**不**更新 `lastBriefDate`，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发 Telegram、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
+`package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但**不**更新 `lastBriefDate`，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
 
 ## 4. 配置文件 `config.example.toml`
 
@@ -75,9 +80,16 @@ my-morning-brief/
 [paths]
 data_dir = "."   # state.json、location.json、todo.md、archive/、logs/ 的根目录；相对路径按项目根目录解析。服务器上可以指向挂载卷
 
+# 聊天渠道：至少开一个。两个都开时，早报两边都发；在哪边提问就在哪边回复
 [telegram]
+enabled = true
 bot_token = "在这里填 BotFather 给你的 token"   # 也可以用环境变量 TELEGRAM_BOT_TOKEN 提供，环境变量优先
 chat_id = 0          # 先留 0，启动后给机器人发 /start 获取；也可以用环境变量 TELEGRAM_CHAT_ID
+
+[discord]
+enabled = false
+bot_token = "在这里填 Discord Developer Portal 里 Bot 页面的 token"   # 也可以用环境变量 DISCORD_BOT_TOKEN
+user_id = ""         # 你的 Discord 用户 ID，是一串数字，必须加引号（超出 JS 安全整数范围）。先留空，启动后私信机器人任意一句获取；也可以用环境变量 DISCORD_USER_ID
 
 [ollama]
 host = "http://localhost:11434"
@@ -93,7 +105,7 @@ time = "08:00"             # 按当前生效时区的当地时间发送
 weekend_news = true        # false 时周末早报不抓新闻，也不包含新闻小节
 catch_up_until = "12:00"   # 电脑睡过了发送时间，醒来后在这个时间之前仍补发；必须晚于 time，不支持跨午夜
 retry_minutes = [2, 5, 10] # 生成或发送失败后的重试间隔（仍受 catch_up_until 限制）
-# 以下是“家”的时区和位置。旅行时可以在 Telegram 里用 /city 临时切换，/home 恢复为这里的设置
+# 以下是“家”的时区和位置。旅行时可以在聊天里用 /city 临时切换，/home 恢复为这里的设置
 timezone = "Pacific/Auckland"
 city = "Auckland"
 latitude = -36.85
@@ -139,7 +151,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 - 初始化项目：`git init`、package.json、tsconfig（strict、ESM、NodeNext）、eslint、prettier、vitest、.gitignore。
 - `config.ts`：用 zod 定义 schema，提供默认值，校验失败时打印中文错误（比如“缺少 telegram.bot_token”）。`config.toml` 不存在时提示“请先复制 config.example.toml 为 config.toml”。还要校验 `brief.catch_up_until` 晚于 `brief.time`，时区是 luxon 能识别的有效 IANA 时区。环境变量覆盖和 `MORNING_BRIEF_CONFIG` 也在这里实现（见第 6 节“可移植性”）。
-- `logger.ts`：带时间戳，分 info、warn、error 三级，只写 stdout/stderr。所有输出（包括错误对象的 message 和 stack）都要经过脱敏：把 bot token、每个 ics 链接和 `healthcheck_url` 替换成 `***`。grammY 的网络错误里会带 `https://api.telegram.org/bot<token>/...`，所以不能只靠“注意别打印”。
+- `logger.ts`：带时间戳，分 info、warn、error 三级，只写 stdout/stderr。所有输出（包括错误对象的 message 和 stack）都要经过脱敏：把 Telegram 和 Discord 的 bot token、每个 ics 链接和 `healthcheck_url` 替换成 `***`。grammY 的网络错误里会带 `https://api.telegram.org/bot<token>/...`，所以不能只靠“注意别打印”。
 - `fsUtil.ts`、`state.ts`：按第 6 节“数据持久化”实现原子写入、`data_dir` 初始化、启动时清理残留临时文件、`state.json` 读写和损坏恢复。
 - `location.ts`：按第 6 节“位置和时区”实现 `getEffectiveLocation()`、`setLocationOverride()`、`clearLocationOverride()` 和 `searchCity(name, country?)`。后面所有需要时区或天气位置的地方都通过 `getEffectiveLocation()` 获取，不直接读 `config.brief.timezone`。
 
@@ -182,7 +194,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - 在它之上提供 `writeBrief(data)`、`answer(context, history, question)`。
 - 请求前粗略估算输入长度（中文按 1 字 ≈ 1 token、英文按 4 字符 ≈ 1 token），超过 `num_ctx` 的 75% 时记一条 warn 日志，并按比例减少新闻条数，保证不被 Ollama 静默截断。
 - 去掉模型输出里可能出现的 `<think>…</think>`。
-- **提示注入**：日历事件标题任何人都能写（给你发一个会议邀请就行），RSS 内容也来自外部，它们都会进入模型输入。现在模型没有工具权限，主要风险是它在回复里写出恶意链接，而 Telegram 会把网址显示成可点击的。所以模型输出（早报和聊天回复）先删掉其中所有 URL 和 Markdown 链接（只保留链接文字），**然后**再把新闻编号 `[N3]` 替换成 `[原文](真实链接)`；模型写出的不存在的编号直接删掉。最终消息里的链接只能来自新闻编号映射。
+- **提示注入**：日历事件标题任何人都能写（给你发一个会议邀请就行），RSS 内容也来自外部，它们都会进入模型输入。现在模型没有工具权限，主要风险是它在回复里写出恶意链接，而 Telegram 和 Discord 都会把网址显示成可点击的。所以模型输出（早报和聊天回复）先删掉其中所有 URL 和 Markdown 链接（只保留链接文字），**然后**再把新闻编号 `[N3]` 替换成 `[原文](真实链接)`；模型写出的不存在的编号直接删掉。最终消息里的链接只能来自新闻编号映射。
 - 用一个简单的队列或互斥锁保证同一时间只有一个模型请求，避免定时早报和聊天抢资源。提供 `isBusy()` 和当前任务类型，供机器人提示用户排队（见阶段 5）。
 
 `newsSelect.ts`，`selectNews(candidates, excludeLinks, config)`，在写早报之前执行，第一批**不调用模型**：
@@ -254,19 +266,44 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 3. 从归档读取 `recentSelectedNewsLinks(dedup_days)`，调用 `selectNews`；
 4. `gather` 拼输入，`writeBrief` 生成，清理输出、替换链接；
 5. `archive` 为 true 时写归档（`kind` 是 `scheduled` 或 `manual`，决定文件名）；
-6. 调用 `send`（Telegram 发送，或者 `brief:dry` 时打印到终端）。
+6. 调用 `send`（发到聊天渠道，或者 `brief:dry` 时打印到终端）。
 
 `runBrief` 返回结构化结果（生成好的早报、挑选出的新闻、是否降级、每一步是否成功），**不**自己更新 `lastBriefDate`，也不做重试；这些由调用方（阶段 6 的定时器）处理。生成成功但 `send` 失败时，结果里要带上已生成的早报，供定时器重发。
 
 **验收**：`npm run brief:dry` 能在终端打印原始数据和早报（需要本机有 Ollama）。归档有测试（用临时目录），覆盖写入、定时和手动的文件命名、同一天多次手动生成不重名、`readBrief` 优先返回定时早报、过期清理不删除保留期内的目录、`retention_days = 0` 时不删除、`recentSelectedNewsLinks` 只返回最终用到的链接并跳过损坏的文件。`runBrief` 有测试（mock 数据源、模型和 send），覆盖正常流程、`archive: false` 时不写归档、send 失败时结果里带有已生成的早报。
 
-#### 阶段 5：Telegram 机器人
+#### 阶段 5：聊天机器人（Telegram 和 Discord）
 
-`bot.ts`，使用 grammY 长轮询：
+两个渠道都支持，在 config.toml 里各自用 `enabled` 开关。命令、对话和权限逻辑只写一份，渠道适配层只负责收发消息：
 
-- **首次配置**：`chat_id` 为 0 时，任何人发消息，机器人都回复“你的 chat_id 是：xxx，请填进 config.toml 的 telegram.chat_id（或设置环境变量 TELEGRAM_CHAT_ID）后重启”，不做其他事。
-- **只服务主人**：配置了 chat_id 后，只处理**私聊**且 `chat.id` 和 `from.id` 都等于 chat_id 的消息；其他消息（包括机器人被拉进群后的群消息）一律忽略，并记一条日志。用 grammY 中间件实现。
-- 启动时通过 `setMyCommands` 注册命令菜单：
+- `chat/commands.ts`：和平台无关的核心。输入是“哪个渠道、发送者是不是主人、文字内容”，输出是要回复的 Markdown 文本。下面所有命令、`/city`、对话记忆、忙碌提示都在这里实现，测试主要测这一层。
+- `chat/channel.ts`：`Channel { name; ready; start(); stop(); send(markdown) }`。早报、`brief:once` 和定时器只通过这个接口发送，不关心平台。`ready` 表示 token 有效且已经配置了主人 id。
+- 两个渠道都开时：早报发给每个 `ready` 的渠道；普通消息和命令在哪个渠道收到，就回复到哪个渠道。对话记忆两边共用（是同一个人）。
+- **配置**：`config.ts` 加上 `[discord]` 和两个 `enabled`（默认都是 false，示例配置里明确写出）。启动 `start` / `brief:once` 时至少要开一个渠道，开了的渠道 token 不能是占位符；`brief:dry` 不检查渠道。
+- **先做 Discord**：用户现在用不了 Telegram，Discord 可以实际验证；Telegram 适配照样实现并有单元测试，等能用时再做真机验证。
+
+**共同规则**（两个渠道都一样）：
+
+- **首次配置**：主人 id 为空（Telegram `chat_id = 0`，Discord `user_id = ""`）时，任何人发消息，机器人都回复“你的 id 是：xxx，请填进 config.toml 的 telegram.chat_id / discord.user_id（或对应的环境变量）后重启”，不做其他事。
+- **只服务主人**：只处理**私聊/私信**里主人本人发来的消息；其他消息（包括群消息、Discord 服务器频道里的消息、别人的私信）一律忽略，并记一条日志。
+- **同时只能运行一个实例**：启动时在 `data_dir` 写 `app.lock`（内容是 pid）。锁文件存在且那个 pid 还活着就退出，并提示“另一个实例正在运行（可能是开机自启的那个），请先停掉其中一个”；pid 已经不存在就接管。Telegram 有 409 Conflict 兜底，但 Discord 允许同一个 token 多个连接，两个实例会各回复一遍，所以必须自己加锁。
+
+**Telegram**（`chat/telegram.ts`，grammY 长轮询）：
+
+- 只处理私聊且 `chat.id` 和 `from.id` 都等于 chat_id 的消息，用 grammY 中间件实现。
+- 启动时通过 `setMyCommands` 注册命令菜单（命令表见下）。
+- 回复用 `telegramFormat.ts` 转换（见下）。
+
+**Discord**（`chat/discord.ts`，discord.js）：
+
+- 在 Discord Developer Portal 创建应用和 Bot，token 填进 `discord.bot_token`。intents 只要 `DirectMessages`，并加上 `Partials.Channel`，否则收不到私信事件。私信内容不需要特权 intent `MessageContent`。
+- 用户和机器人必须至少在一个共同服务器里才能发起私信：自己建一个空服务器，把 bot 邀请进去。README 写清楚步骤。
+- 只处理私信（没有 guild）且 `author.id` 等于 `user_id` 的消息；忽略机器人自己和其他 bot 的消息。Discord 的 id 一律按**字符串**处理。
+- 命令：启动时注册全局 slash 命令（和下面同一张表，`contexts` 只允许 BotDM）。slash 命令触发的是 interaction，必须 3 秒内 `deferReply()`，生成完再 `editReply`，后续分段用 `followUp`（15 分钟内有效，够模型生成）。同样检查 `interaction.user.id` 和不在服务器里。以 `/` 开头的普通文字消息也按命令解析，作为兜底。
+- 回复直接用 Discord 自带的 Markdown（支持 `**粗体**`、`[文字](链接)`、`# 标题`），不需要转换，只需按段落切分，每段不超过 2000 字符（单个段落过长时再按行切，切分点不能落在 `[文字](链接)` 中间）。每条消息都带 `SuppressEmbeds` 标志，避免每条新闻都展开预览卡片。
+- 断线时 discord.js 自动重连，程序不能退出。
+
+命令表：
 
 | 命令 | 作用 |
 |---|---|
@@ -294,31 +331,32 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - **新闻**：直接用当天早报挑选出的那批新闻（来自最近一次 `runBrief` 的结果；重启后从归档的 `raw.json` 读取），**不重新抓取或挑选**。这样用户问“第二条新闻展开讲讲”时，模型看到的和早报是同一批；当天还没有早报时，新闻部分写“今天的早报还没生成”。
   - **天气、日程、待办**：缓存 30 分钟，缓存 key 包含当前生效时区和该时区下的日期，跨过午夜或切换位置时自动失效；`/add`、`/done`、`/refresh` 后也失效。
   - 对话记忆保留最近 10 轮。每次发送早报后，把早报本身作为第一条 assistant 消息放进对话记忆。对话记忆只在内存里；**启动时**如果归档里有今天的早报，就把它加载为第一条 assistant 消息，这样重启后仍然可以接着问。
-- 模型生成期间持续发送 `typing` 状态（每 4 秒一次，直到回复发出）。
-- 用户发消息时如果模型正在忙（`isBusy()`），先回复一句“正在生成早报，稍后回复你”（或者“上一个问题还在处理，稍等”），然后排队；回复发出后再停止 typing。
+- 模型生成期间持续发送“正在输入”状态（Telegram 每 4 秒一次；Discord 每 8 秒 `sendTyping()` 一次，它的状态维持约 10 秒），直到回复发出。
+- 用户发消息时如果模型正在忙（`isBusy()`），先回复一句“正在生成早报，稍后回复你”（或者“上一个问题还在处理，稍等”），然后排队；回复发出后再停止 typing。正在生成早报时提的问题，要等早报**发出之后**再回答，并且用这份新早报的新闻作上下文（`ChatCore.trackBrief`，阶段 6 的定时早报也要用它）。
 - **telegramFormat.ts**：先把原始 Markdown 按段落切分，保证每段转换后不超过 4000 字符（单个段落过长时再按行切），**然后**再逐段转换：先对 HTML 转义，再把 `**粗体**`、`[文字](链接)`、`` `代码` ``、`# 标题` 转成 Telegram HTML。顺序不能反，否则可能把 `<a>` 标签切断导致解析失败。HTML 解析失败时退回纯文本重发。
 - 网络断开时 grammY 自动重试，程序不能退出。
-- 同一个 bot token 同时只能有一个进程长轮询，否则 Telegram 返回 409 Conflict。收到 409 时记一条 error 日志：“另一个实例正在运行（可能是开机自启的那个），请先停掉其中一个”。
+- 同一个 bot token 同时只能有一个进程长轮询，否则 Telegram 返回 409 Conflict。收到 409 时记一条 error 日志，内容同上面的单实例提示。
 
-**验收**：formatter 有测试，覆盖转义、链接里的 `&`、分段（包括切分点附近有链接的情况，每段转换后的 HTML 标签都要成对）。bot 的命令处理有测试（mock grammY context 或者把处理逻辑抽成纯函数测试），覆盖首次配置、陌生人被忽略、群消息被忽略、增删待办、序号无效、`/history` 日期解析和没有归档的日期、启动时从归档恢复今天的早报、模型忙时先回复排队提示、`/city` 成功切换并回复双时区时间、`/city` 没有结果时不修改、`/city Wellington` 的回复里列出其他时区不同的同名地点、`/city Wellington United Kingdom` 按国家选中英国、`/home` 恢复、切换位置后数据缓存失效、对话上下文里的新闻和当天早报是同一批且不触发重新抓取。
+**验收**：Telegram formatter 有测试，覆盖转义、链接里的 `&`、分段（包括切分点附近有链接的情况，每段转换后的 HTML 标签都要成对）。Discord 分段有测试（每段不超过 2000 字符、不切断链接）。两个适配层各有测试（mock grammY context / discord.js 消息和 interaction），覆盖首次配置回复 id、陌生人被忽略、群消息和服务器频道消息被忽略、Discord slash 命令先 defer 再回复。单实例锁有测试（pid 活着时拒绝启动，pid 不存在时接管）。两个渠道都开时早报两边都收到、提问只回复到来源渠道。`commands.ts` 有测试，覆盖增删待办、序号无效、`/history` 日期解析和没有归档的日期、启动时从归档恢复今天的早报、模型忙时先回复排队提示、`/city` 成功切换并回复双时区时间、`/city` 没有结果时不修改、`/city Wellington` 的回复里列出其他时区不同的同名地点、`/city Wellington United Kingdom` 按国家选中英国、`/home` 恢复、切换位置后数据缓存失效、对话上下文里的新闻和当天早报是同一批且不触发重新抓取。
 
 #### 阶段 6：定时与补发
 
 `scheduler.ts`：
 
-- `chat_id` 为 0（还没完成首次配置）时不启动定时器，只记一条 info 日志，否则会没有发送对象、白白耗光重试次数。
+- 没有任何一个 `ready` 的渠道（都还没完成首次配置）时不启动定时器，只记一条 info 日志，否则会没有发送对象、白白耗光重试次数。
+- 发送：传给 `runBrief` 的 `send` 依次发给每个 `ready` 的渠道，有渠道失败时抛出带失败渠道名单的错误（成功的渠道不受影响）。
 - 每 30 秒检查一次：按**当前生效时区**（每次检查都重新调用 `getEffectiveLocation()`，切换位置后立即生效），当前时间已过 `brief.time`、早于 `catch_up_until`，并且 `state.json` 里的 `lastBriefDate` 不是今天，就调用 `runBrief`（`kind = scheduled`）并记录日期。这样电脑睡过了 8 点，醒来后也会补发，而且一天只发一次，重启也不会重复。
 - 切换时区可能让“今天”的日期往前或往后跳：往西切（比如奥克兰 → 上海），切换后的“今天”可能仍是已经发过的那天，按上面的规则自然跳过，不会重复发；往东切（回到奥克兰），日期可能前进一天，在发送窗口内就会正常发送。这两种情况都不需要特殊处理，但要有测试。
 - 用轮询检查，不用 cron 库，因为 cron 在 Mac 睡眠后会错过触发。
 - 时间判断写成纯函数 `shouldSendBrief(now, state, location, config)`，方便测试。
 - **失败重试**：Mac 刚醒来时网络或 Ollama 经常还没就绪，所以失败后不能立即记为已发送。在 `state.json` 里记录当天的失败次数和下次重试时间，按 `retry_minutes` 退避重试（重试也要在 `catch_up_until` 之前）：
   - 模型失败但数据抓到了：重试用完后发送降级早报（`formatFallbackBrief`），记为已发送；
-  - 早报已经生成、只是 Telegram 发送失败：把生成好的早报存进 `state.json` 的 `pendingBrief`（带日期），重试时**只重发，不重新抓数据和调用模型**；重试用完后只记日志（发不出去也就没法提醒），记为已发送；
+  - 早报已经生成、只是发送失败：把生成好的早报存进 `state.json` 的 `pendingBrief`（带日期和**失败的渠道**），重试时**只重发给这些渠道，不重新抓数据和调用模型**，已经收到的渠道不会重复收到；重试用完后只记日志（发不出去也就没法提醒），记为已发送；
   - 到了 `catch_up_until` 还没成功：停止重试，记一条 error 日志。
   - 发送成功或放弃后清掉 `pendingBrief`；`pendingBrief` 的日期不是今天时直接丢弃。
 - **防止生成中途睡眠**：Mac 被 `pmset` 唤醒后，没有用户操作时很快会再次睡眠，而本地模型生成一份早报可能要几十秒到几分钟。从开始抓数据到发送完成，用 `caffeinate -i -w <本进程 pid>` 子进程持有防睡眠断言，结束后 kill 掉它。只在 `process.platform === 'darwin'` 时这样做，其他平台跳过；`caffeinate` 启动失败也只记 warn，不影响早报。
 
-**验收**：`shouldSendBrief` 有表驱动测试，覆盖发送时间前后、已经发过、超过补发截止时间、午夜后 `lastBriefDate` 是昨天、夏令时切换日、处于重试等待中、重试次数用完、切换到 `Asia/Shanghai` 后按上海时间 08:00 发送（即奥克兰时间 13:00）、往西切换后不重复发送、往东切换回家后正常发送。重试流程有测试（mock 模型失败两次后成功、一直失败走降级早报、Telegram 发送失败后重试时不再调用模型）。`chat_id` 为 0 时定时器不启动。
+**验收**：`shouldSendBrief` 有表驱动测试，覆盖发送时间前后、已经发过、超过补发截止时间、午夜后 `lastBriefDate` 是昨天、夏令时切换日、处于重试等待中、重试次数用完、切换到 `Asia/Shanghai` 后按上海时间 08:00 发送（即奥克兰时间 13:00）、往西切换后不重复发送、往东切换回家后正常发送。重试流程有测试（mock 模型失败两次后成功、一直失败走降级早报、发送失败后重试时不再调用模型、两个渠道只有一个失败时只重发给失败的那个）。没有 `ready` 渠道时定时器不启动。
 
 #### 阶段 7：开机自启和文档
 
@@ -327,12 +365,12 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   1. 安装 Ollama，`ollama pull` 模型，模型名以 ollama.com/library 为准；
   2. 用 @BotFather 创建机器人拿 token；
   3. `npm install`，复制配置文件；
-  4. 首次运行获取 chat_id；
+  4. 首次运行获取 chat_id / Discord user_id；Discord 还要写建应用、建空服务器、邀请 bot 的步骤；
   5. `npm run brief:dry` 和 `/brief` 测试；
   6. 安装开机自启，查看日志；
   7. 让 Mac 早上醒着：插电时防止自动睡眠，或者 `sudo pmset repeat wakeorpoweron MTWRFSU 07:55:00`。说明程序生成期间会自己用 `caffeinate` 防止再次睡眠，但 Mac 必须先被唤醒；如果中午 `catch_up_until` 之前都没醒，当天就不会补发；
   8. 如何获取 Google、Outlook、iCloud 日历的 .ics 链接（提醒这些链接等同于钥匙，不要泄露）；
-  9. 查看历史早报：在 Telegram 里用 `/history`，或者直接打开 `archive/日期/` 下的文件；定时和手动早报的文件名区别；说明 `retention_days`；
+  9. 查看历史早报：在聊天里用 `/history`，或者直接打开 `archive/日期/` 下的文件；定时和手动早报的文件名区别；说明 `retention_days`；
   10. 新闻来源：怎么找 RSS 地址（RSS 图标、`/feed` 等常见路径、网页源码里的 `application/rss+xml`、RSSHub），怎么用 `curl` 检查（压缩的 feed 要加 `--compressed`）；`max_age_hours`、`select_count` 和 `dedup_days` 的作用；怎么从 `raw.json` 看挑选结果；
   11. 旅行时切换位置：`/city`、`/where`、`/home` 的用法；发送时间按当地 08:00；用英文城市名（比如 `/city Shanghai`），切错时加上国家（比如 `/city Wellington New Zealand`），回家直接 `/home`；
   12. **长时间外出前的检查清单**（Mac 留在家里无人照看）：
@@ -342,9 +380,9 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
       - Ollama 也要设为登录时自动启动；
       - 准备远程登录：安装 Tailscale，开启“系统设置 → 通用 → 共享 → 远程登录”，出问题时可以 SSH 回去看日志、重启程序；
       - 出发前演练一次：`/city` 切换到目的地，确认回复里的国家和发送时间正确，再 `/brief` 测试一次，确认天气已经换成目的地，最后 `/home` 切回来；
-      - 去中国大陆时，手机上收 Telegram（以及 Tailscale 远程登录）需要 VPN；Mac 留在奥克兰，抓取数据不受影响；
+      - 去中国大陆时，手机上收 Telegram 或 Discord（以及 Tailscale 远程登录）需要 VPN；Mac 留在奥克兰，抓取数据不受影响；
   13. 常见问题：包括“409 Conflict”（开机自启的实例和手动 `npm start` 同时运行，先 `scripts/install-autostart.sh remove` 或停掉手动的那个）、“早报内容不全或胡编”（检查 `num_ctx`）、升级 node 后自启失效；
-  14. 隐私说明：推理在本地，但早报内容会经过 Telegram 服务器；`archive/` 里保存了日程和待办的明文，不要放进同步盘或提交到 git；
+  14. 隐私说明：推理在本地，但早报内容会经过 Telegram / Discord 的服务器；`archive/` 里保存了日程和待办的明文，不要放进同步盘或提交到 git；
   15. 数据和备份：说明 `data_dir` 里有哪些文件、各自的作用；Mac 上靠 Time Machine；服务器上用云盘快照，或者每天用 `restic`/`rclone` 把 `data_dir` 备份到对象存储（给出一个 cron 示例，备份要加密，因为里面有日程和待办等私人数据）；Docker 必须把 `data_dir` 挂载成 volume；不要部署到 Cloud Run、Lambda 这类无状态平台。
   - README 末尾加“设计说明”：日历库的选择结果（阶段 2）以及实现过程中按“选最简单、可测试的做法”自行决定的细节。
 
@@ -387,7 +425,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 ## 6. 通用要求
 
 - 所有面向用户的文字（机器人回复、错误提示、README）都用简体中文；代码标识符和注释用英文。
-- 不要把 token、chat_id、日历链接打印到日志里；所有日志都经过 `logger.ts` 统一脱敏（见阶段 1）。
+- 不要把 token、chat_id、Discord user_id、日历链接打印到日志里；所有日志都经过 `logger.ts` 统一脱敏（见阶段 1）。
 - 日志带时间戳，级别分 info、warn、error。
 - 未捕获的错误：`unhandledRejection` 只记 error 日志，进程继续运行；`uncaughtException` 记 error 日志后以非零状态码退出，由 launchd（以后是 systemd 或 Docker）重启。因为 Node 在 `uncaughtException` 之后内部状态不可靠，继续运行可能出现隐蔽问题；状态都在文件里，重启不会重复发送早报。可以预见的错误（网络、模型、文件读写）都要在业务代码里捕获，不能依赖这两个兜底。
 - 依赖保持精简，不引入 Web 框架或数据库。
@@ -408,7 +446,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 - **不依赖系统时区**：所有日期时间都通过 luxon 按当前生效时区计算，不能用 `new Date().getHours()`、`toLocaleString()` 这类依赖系统时区的写法。测试用 `TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍（`package.json` 里的 `test` 脚本直接这样做）。
 - **路径都可配置**：状态、位置、归档、日志、待办都放在 `paths.data_dir` 下，代码里不写死项目目录或 `~`。配置文件路径可以用环境变量 `MORNING_BRIEF_CONFIG` 指定。
-- **密钥可以走环境变量**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 等环境变量优先于 config.toml，方便在服务器上用 secret 管理，不把 token 写进镜像。
+- **密钥可以走环境变量**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`、`DISCORD_BOT_TOKEN`、`DISCORD_USER_ID` 等环境变量优先于 config.toml，方便在服务器上用 secret 管理，不把 token 写进镜像。
 - **日志写到 stdout/stderr**：程序本身不写日志文件，由运行环境收集（launchd 重定向到文件，服务器上交给 systemd 或 Docker）。
 - **macOS 专属的东西隔离开**：`caffeinate`、launchd 脚本、`pmset` 说明只出现在各自的位置，并且按平台判断，主流程不依赖它们。
 - **模型调用走接口**：`llm.ts` 里的 `LlmClient` 接口，这次只实现 Ollama 版本。以后换成别的推理后端时只需要加一个实现，不改其他代码。
@@ -427,7 +465,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 ## 7. 以后可以做的（这两批都不做）
 
-- 让模型通过 **tool calling** 直接操作待办（“提醒我明天交水费”自动调用 addTodo），Qwen 系列支持工具调用。**做之前必须先处理提示注入**：日历邀请和 RSS 里的文字可能诱导模型调用工具。至少要做到：只有用户本人消息触发的对话才能调用工具（生成早报时不提供工具），并且有写操作的工具调用要先发给用户确认（Telegram 按钮）再执行。
+- 让模型通过 **tool calling** 直接操作待办（“提醒我明天交水费”自动调用 addTodo），Qwen 系列支持工具调用。**做之前必须先处理提示注入**：日历邀请和 RSS 里的文字可能诱导模型调用工具。至少要做到：只有用户本人消息触发的对话才能调用工具（生成早报时不提供工具），并且有写操作的工具调用要先发给用户确认（Telegram / Discord 按钮）再执行。
 - 语音消息：用本地 Whisper 转文字。
 - 晚间回顾：每天晚上总结完成了哪些待办，提醒明天的日程。
 - 更多数据源：汇率、快递追踪、邮件摘要。
@@ -438,7 +476,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - Ilya Sutskever、Geoffrey Hinton、Yann LeCun：没有可用的第一手订阅（LeCun 的 Bluesky 2024 年 12 月后基本不更新，主要发在没有 RSS 的 Threads 和 LinkedIn）。用 Google News 合并搜索：`https://news.google.com/rss/search?q=%22Ilya+Sutskever%22+OR+%22Geoffrey+Hinton%22+OR+%22Yann+LeCun%22+when:2d&hl=en-NZ&gl=NZ&ceid=NZ:en`。
   - Peter Thiel：同样只能用 Google News，单独一个搜索（`%22Peter+Thiel%22+when:2d`），结果里 Palantir 和政治新闻很多，靠新闻筛选（阶段 8.1）过滤。
   - X 平台：不接。官方 API 读取要付费，Nitter 和 RSSHub 的 X 路由需要真实账号 cookie，违反使用条款且不稳定。如果以后某个只在 X 上发的账号确实重要，再考虑用官方 API 加一种 `type = "x"` 的源。
-- **根据反馈学习新闻偏好**（依赖阶段 8.1）：早报里每条新闻后加 👍/👎 按钮（Telegram inline keyboard），反馈连同标题、来源记到 `data_dir/feedback.jsonl`（追加写入）。每周让模型根据反馈总结出新的 `interests`/`avoid` 建议，发给用户，用户点“采用”后才写入。学到的偏好单独存在 `data_dir/preferences.toml`，和手写的配置合并使用，不改 `config.toml`。
+- **根据反馈学习新闻偏好**（依赖阶段 8.1）：早报里每条新闻后加 👍/👎 按钮（Telegram inline keyboard / Discord 按钮），反馈连同标题、来源记到 `data_dir/feedback.jsonl`（追加写入）。每周让模型根据反馈总结出新的 `interests`/`avoid` 建议，发给用户，用户点“采用”后才写入。学到的偏好单独存在 `data_dir/preferences.toml`，和手写的配置合并使用，不改 `config.toml`。
 - **部署到服务器**：加 Dockerfile 和 systemd unit 示例。迁移前要先决定两件事：
   - **模型放在哪里**：（a）服务器只跑机器人和定时任务，通过 Tailscale 等私有网络调用家里 Mac 上的 Ollama（模型仍在本地，但 Mac 必须醒着；连不上时走降级早报）；（b）租带 GPU 的服务器自己跑 Ollama（数据不出自己的机器，但费用高）；（c）改用云端模型 API（便宜、稳定，但违背“推理完全在本机”的初衷，日程和待办会发给模型服务商）。
   - **待办文件怎么同步**：服务器上的 `todo.md` 不再和本机 Obsidian 是同一个文件。可以只通过机器人管理待办，或者用 git、Syncthing 同步，需要处理两边同时修改的冲突。

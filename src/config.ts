@@ -15,6 +15,7 @@ export class ConfigError extends Error {
 
 // Values copied verbatim from config.example.toml mean the user has not filled them in yet.
 const PLACEHOLDER_BOT_TOKEN = '在这里填 BotFather 给你的 token';
+const PLACEHOLDER_DISCORD_TOKEN = '在这里填 Discord Developer Portal 里 Bot 页面的 token';
 const PLACEHOLDER_MODEL = '填你的模型名';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -28,16 +29,24 @@ const nonNegativeInt = z.number().int().nonnegative();
 
 const schema = z.object({
   paths: z.object({ data_dir: z.string().min(1).default('.') }).prefault({}),
-  telegram: z.object({
-    bot_token: z
-      .string()
-      .min(1)
-      .refine(
-        (value) => value !== PLACEHOLDER_BOT_TOKEN,
-        '还是示例值，请填入 BotFather 给你的 token',
-      ),
-    chat_id: z.number().int().default(0),
-  }),
+  telegram: z
+    .object({
+      enabled: z.boolean().default(false),
+      bot_token: z.string().default(''),
+      chat_id: z.number().int().default(0),
+    })
+    .prefault({}),
+  discord: z
+    .object({
+      enabled: z.boolean().default(false),
+      bot_token: z.string().default(''),
+      // Snowflakes exceed Number.MAX_SAFE_INTEGER, so they must stay strings.
+      user_id: z
+        .string()
+        .regex(/^\d*$/, '应为一串数字（加引号），例如 "123456789012345678"')
+        .default(''),
+    })
+    .prefault({}),
   ollama: z.object({
     host: z.url().default('http://localhost:11434'),
     model: z
@@ -102,14 +111,11 @@ export interface LoadConfigOptions {
   path?: string;
   env?: NodeJS.ProcessEnv;
   /**
-   * False for brief:dry, which never talks to Telegram: a missing or
-   * placeholder token is then accepted, so the brief can be tried first.
+   * False for brief:dry, which never sends anything: no channel needs to be
+   * enabled or have a real token, so the brief can be tried first.
    */
-  requireTelegram?: boolean;
+  requireChannel?: boolean;
 }
-
-/** Stands in for the token when Telegram is not needed. */
-export const NO_TELEGRAM_TOKEN = 'dry-run-without-telegram';
 
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<Config> {
   const env = options.env ?? process.env;
@@ -135,24 +141,48 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Confi
     throw new ConfigError(`配置文件 ${path} 不是有效的 TOML：${(error as Error).message}`);
   }
 
-  const withEnv = applyEnvOverrides(raw, env);
-  if (options.requireTelegram === false) {
-    const telegram = withEnv.telegram as Record<string, unknown>;
-    if (!telegram.bot_token || telegram.bot_token === PLACEHOLDER_BOT_TOKEN) {
-      telegram.bot_token = NO_TELEGRAM_TOKEN;
-    }
-  }
-  return parseConfig(withEnv);
+  return parseConfig(applyEnvOverrides(raw, env), options);
 }
 
 /** Validates an already-parsed TOML object and resolves relative paths. */
-export function parseConfig(raw: Record<string, unknown>): Config {
+export function parseConfig(
+  raw: Record<string, unknown>,
+  options: Pick<LoadConfigOptions, 'requireChannel'> = {},
+): Config {
   const result = schema.safeParse(raw);
-  if (!result.success) {
-    const lines = result.error.issues.map((issue) => `- ${describeIssue(issue, raw)}`);
+  const lines = result.success
+    ? []
+    : result.error.issues.map((issue) => `- ${describeIssue(issue, raw)}`);
+  if (result.success && options.requireChannel !== false) {
+    lines.push(...channelProblems(result.data).map((problem) => `- ${problem}`));
+  }
+  if (!result.success || lines.length > 0) {
     throw new ConfigError(`配置有误：\n${lines.join('\n')}`);
   }
   return resolvePaths(result.data);
+}
+
+function channelProblems(config: Config): string[] {
+  const { telegram, discord } = config;
+  if (!telegram.enabled && !discord.enabled) {
+    return ['至少要开启一个聊天渠道：telegram.enabled 或 discord.enabled 设为 true'];
+  }
+  const problems: string[] = [];
+  if (telegram.enabled) {
+    if (!telegram.bot_token) problems.push('缺少 telegram.bot_token');
+    else if (telegram.bot_token === PLACEHOLDER_BOT_TOKEN) {
+      problems.push('telegram.bot_token 还是示例值，请填入 BotFather 给你的 token');
+    }
+  }
+  if (discord.enabled) {
+    if (!discord.bot_token) problems.push('缺少 discord.bot_token');
+    else if (discord.bot_token === PLACEHOLDER_DISCORD_TOKEN) {
+      problems.push(
+        'discord.bot_token 还是示例值，请填入 Discord Developer Portal 里 Bot 页面的 token',
+      );
+    }
+  }
+  return problems;
 }
 
 function applyEnvOverrides(raw: Record<string, unknown>, env: NodeJS.ProcessEnv) {
@@ -163,7 +193,10 @@ function applyEnvOverrides(raw: Record<string, unknown>, env: NodeJS.ProcessEnv)
     // Keep the raw string when it is not a number so validation reports it.
     telegram.chat_id = Number.isInteger(chatId) ? chatId : env.TELEGRAM_CHAT_ID;
   }
-  return { ...raw, telegram };
+  const discord = { ...(raw.discord as Record<string, unknown> | undefined) };
+  if (env.DISCORD_BOT_TOKEN) discord.bot_token = env.DISCORD_BOT_TOKEN;
+  if (env.DISCORD_USER_ID) discord.user_id = env.DISCORD_USER_ID;
+  return { ...raw, telegram, discord };
 }
 
 function describeIssue(issue: z.core.$ZodIssue, raw: unknown): string {
@@ -223,6 +256,8 @@ function resolvePaths(config: Config): Config {
 export function secretsOf(config: Config): string[] {
   return [
     config.telegram.bot_token,
+    config.discord.bot_token,
+    config.discord.user_id,
     ...config.calendar.ics_urls,
     ...config.calendar.ics_urls.map((url) => url.replace(/^webcal:\/\//i, 'https://')),
     config.monitor.healthcheck_url,

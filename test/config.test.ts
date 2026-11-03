@@ -2,14 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  ConfigError,
-  loadConfig,
-  NO_TELEGRAM_TOKEN,
-  parseConfig,
-  PROJECT_ROOT,
-  secretsOf,
-} from '../src/config.js';
+import { ConfigError, loadConfig, parseConfig, PROJECT_ROOT, secretsOf } from '../src/config.js';
 import { makeTempDir, minimalRawConfig } from './helpers.js';
 
 function expectConfigError(raw: Record<string, unknown>, ...messages: string[]) {
@@ -47,19 +40,59 @@ describe('parseConfig', () => {
     await writeFile(
       path,
       example
-        .replace('在这里填 BotFather 给你的 token', '123456789:AAEexampleexampleexampleexample')
+        .replace('在这里填 Discord Developer Portal 里 Bot 页面的 token', 'discord-token-example')
         .replace('填你的模型名', 'qwen3:32b'),
     );
     const config = await loadConfig({ path, env: {} });
     expect(config.news.feeds).toHaveLength(4);
     expect(config.brief.city).toBe('Auckland');
+    expect(config.discord).toEqual({
+      enabled: true,
+      bot_token: 'discord-token-example',
+      user_id: '',
+    });
+    expect(config.telegram.enabled).toBe(false);
   });
 
   it('reports missing fields in Chinese', () => {
-    expectConfigError({ ollama: { model: 'qwen3' } }, '缺少 telegram');
+    expectConfigError({ telegram: { enabled: true } }, '缺少 ollama');
     expectConfigError(
-      { telegram: { chat_id: 1 }, ollama: { model: 'qwen3' } },
+      { telegram: { enabled: true, chat_id: 1 }, ollama: { model: 'qwen3' } },
       '缺少 telegram.bot_token',
+    );
+    expectConfigError(
+      { discord: { enabled: true }, ollama: { model: 'qwen3' } },
+      '缺少 discord.bot_token',
+    );
+  });
+
+  it('requires at least one chat channel, unless asked not to', () => {
+    const raw = { ollama: { model: 'qwen3' } };
+    expectConfigError(raw, '至少要开启一个聊天渠道');
+    expect(parseConfig(raw, { requireChannel: false }).telegram).toEqual({
+      enabled: false,
+      bot_token: '',
+      chat_id: 0,
+    });
+  });
+
+  it('checks tokens only for enabled channels', () => {
+    const config = parseConfig({
+      telegram: { enabled: false, bot_token: '在这里填 BotFather 给你的 token' },
+      discord: { enabled: true, bot_token: 'discord-token', user_id: '123456789012345678' },
+      ollama: { model: 'qwen3' },
+    });
+    expect(config.discord.user_id).toBe('123456789012345678');
+  });
+
+  it('requires the Discord user id to be a quoted string of digits', () => {
+    expectConfigError(
+      { discord: { enabled: true, bot_token: 'x', user_id: 123 }, ollama: { model: 'qwen3' } },
+      'discord.user_id 类型错误，应为 字符串',
+    );
+    expectConfigError(
+      { discord: { enabled: true, bot_token: 'x', user_id: 'me' }, ollama: { model: 'qwen3' } },
+      'discord.user_id 应为一串数字',
     );
   });
 
@@ -73,10 +106,23 @@ describe('parseConfig', () => {
   it('rejects the example placeholders', () => {
     expectConfigError(
       {
-        telegram: { bot_token: '在这里填 BotFather 给你的 token' },
-        ollama: { model: '填你的模型名' },
+        telegram: { enabled: true, bot_token: '在这里填 BotFather 给你的 token' },
+        ollama: { model: 'qwen3' },
       },
       'telegram.bot_token 还是示例值',
+    );
+    expectConfigError(
+      {
+        discord: {
+          enabled: true,
+          bot_token: '在这里填 Discord Developer Portal 里 Bot 页面的 token',
+        },
+        ollama: { model: 'qwen3' },
+      },
+      'discord.bot_token 还是示例值',
+    );
+    expectConfigError(
+      { ...minimalRawConfig(), ollama: { model: '填你的模型名' } },
       'ollama.model 还是示例值',
     );
   });
@@ -110,13 +156,16 @@ describe('parseConfig', () => {
     expect(custom.archive.dir).toBe('/srv/brief/archive');
   });
 
-  it('lists the token, calendar links and healthcheck url as secrets', () => {
+  it('lists the tokens, Discord user id, calendar links and healthcheck url as secrets', () => {
     const config = parseConfig({
       ...minimalRawConfig(),
+      discord: { bot_token: 'discord-token', user_id: '123456789012345678' },
       calendar: { ics_urls: ['webcal://example.com/private-abc.ics'] },
     });
     expect(secretsOf(config)).toEqual([
       '123456789:AAEexampleexampleexampleexampleexample',
+      'discord-token',
+      '123456789012345678',
       'webcal://example.com/private-abc.ics',
       'https://example.com/private-abc.ics',
     ]);
@@ -134,7 +183,10 @@ describe('loadConfig', () => {
   it('honours MORNING_BRIEF_CONFIG', async () => {
     const dir = await makeTempDir();
     const path = join(dir, 'custom.toml');
-    await writeFile(path, '[telegram]\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n',
+    );
     const config = await loadConfig({ env: { MORNING_BRIEF_CONFIG: path } });
     expect(config.ollama.model).toBe('qwen3');
   });
@@ -144,19 +196,38 @@ describe('loadConfig', () => {
     const path = join(dir, 'config.toml');
     await writeFile(
       path,
-      '[telegram]\nbot_token = "from-file"\nchat_id = 0\n[ollama]\nmodel = "qwen3"\n',
+      '[telegram]\nenabled = true\nbot_token = "from-file"\nchat_id = 0\n[ollama]\nmodel = "qwen3"\n',
     );
     const config = await loadConfig({
       path,
       env: { TELEGRAM_BOT_TOKEN: 'from-env-token', TELEGRAM_CHAT_ID: '987654' },
     });
-    expect(config.telegram).toEqual({ bot_token: 'from-env-token', chat_id: 987654 });
+    expect(config.telegram).toEqual({
+      enabled: true,
+      bot_token: 'from-env-token',
+      chat_id: 987654,
+    });
+  });
+
+  it('lets environment variables supply the Discord token and user id', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(path, '[discord]\nenabled = true\n[ollama]\nmodel = "qwen3"\n');
+    const config = await loadConfig({
+      path,
+      env: { DISCORD_BOT_TOKEN: 'env-discord-token', DISCORD_USER_ID: '123456789012345678' },
+    });
+    expect(config.discord).toEqual({
+      enabled: true,
+      bot_token: 'env-discord-token',
+      user_id: '123456789012345678',
+    });
   });
 
   it('supplies the token from the environment when the file has none', async () => {
     const dir = await makeTempDir();
     const path = join(dir, 'config.toml');
-    await writeFile(path, '[ollama]\nmodel = "qwen3"\n');
+    await writeFile(path, '[telegram]\nenabled = true\n[ollama]\nmodel = "qwen3"\n');
     const config = await loadConfig({ path, env: { TELEGRAM_BOT_TOKEN: 'from-env-token' } });
     expect(config.telegram.bot_token).toBe('from-env-token');
   });
@@ -164,25 +235,25 @@ describe('loadConfig', () => {
   it('rejects a non-numeric TELEGRAM_CHAT_ID', async () => {
     const dir = await makeTempDir();
     const path = join(dir, 'config.toml');
-    await writeFile(path, '[telegram]\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n',
+    );
     await expect(loadConfig({ path, env: { TELEGRAM_CHAT_ID: 'me' } })).rejects.toThrow(
       'telegram.chat_id 类型错误',
     );
   });
 
-  it('accepts a missing or placeholder token when Telegram is not required', async () => {
+  it('accepts a placeholder token when no channel is required', async () => {
     const dir = await makeTempDir();
     const path = join(dir, 'config.toml');
     await writeFile(
       path,
-      '[telegram]\nbot_token = "在这里填 BotFather 给你的 token"\n[ollama]\nmodel = "qwen3"\n',
+      '[telegram]\nenabled = true\nbot_token = "在这里填 BotFather 给你的 token"\n[ollama]\nmodel = "qwen3"\n',
     );
     await expect(loadConfig({ path, env: {} })).rejects.toThrow('telegram.bot_token 还是示例值');
-    const config = await loadConfig({ path, env: {}, requireTelegram: false });
-    expect(config.telegram.bot_token).toBe(NO_TELEGRAM_TOKEN);
-
-    await writeFile(path, '[ollama]\nmodel = "qwen3"\n');
-    expect((await loadConfig({ path, env: {}, requireTelegram: false })).telegram.chat_id).toBe(0);
+    const config = await loadConfig({ path, env: {}, requireChannel: false });
+    expect(config.ollama.model).toBe('qwen3');
   });
 
   it('reports invalid TOML', async () => {

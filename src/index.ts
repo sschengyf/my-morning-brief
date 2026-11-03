@@ -1,9 +1,14 @@
 import { Archive } from './archive.js';
 import { runBrief } from './brief.js';
+import { CHANNEL_LABELS, sendToChannels, type Channel } from './chat/channel.js';
+import { ChatCore } from './chat/commands.js';
+import { DiscordChannel } from './chat/discord.js';
+import { TelegramChannel } from './chat/telegram.js';
 import { ConfigError, loadConfig, secretsOf, type Config } from './config.js';
 import { cleanupTempFiles, DataDirError, ensureDataDir } from './fsUtil.js';
 import { LlmError, LlmService, OllamaClient } from './llm.js';
 import { getEffectiveLocation } from './location.js';
+import { acquireLock, LockError } from './lock.js';
 import { logger, registerSecrets } from './logger.js';
 import { loadState } from './state.js';
 
@@ -28,9 +33,9 @@ async function createLlm(config: Config): Promise<LlmService> {
   return new LlmService(client, config.ollama.num_ctx);
 }
 
-/** brief:dry — prints the gathered data and the brief; no Telegram, no archive. */
+/** brief:dry — prints the gathered data and the brief; sends nothing, writes no archive. */
 async function dryRun(): Promise<void> {
-  const config = await loadConfig({ requireTelegram: false });
+  const config = await loadConfig({ requireChannel: false });
   await prepare(config);
   const llm = await createLlm(config);
   logger.info(`正在抓取数据并用 ${config.ollama.model} 生成早报…`);
@@ -49,29 +54,104 @@ async function dryRun(): Promise<void> {
   process.stdout.write(`\n===== 早报 =====\n\n${result.text}\n`);
 }
 
-async function start(mode: 'start' | 'once'): Promise<void> {
+function createChannels(config: Config): Channel[] {
+  const channels: Channel[] = [];
+  if (config.telegram.enabled) channels.push(new TelegramChannel(config.telegram));
+  if (config.discord.enabled) channels.push(new DiscordChannel(config.discord));
+  return channels;
+}
+
+const NO_OWNER_HINT =
+  '还没有配置主人 id：先运行 npm start，给机器人发一条私信，按回复把 id 填进 config.toml';
+
+/** brief:once — sends one brief to every ready channel and exits; lastBriefDate is untouched. */
+async function once(): Promise<void> {
   const config = await loadConfig();
   await prepare(config);
+  const ready = createChannels(config).filter((channel) => channel.ready);
+  if (ready.length === 0) {
+    logger.error(NO_OWNER_HINT);
+    process.exitCode = 1;
+    return;
+  }
+  const llm = await createLlm(config);
+  // Send-only: no handler, so a running `npm start` keeps receiving the messages.
+  await Promise.all(ready.map((channel) => channel.start()));
+  try {
+    const result = await runBrief(
+      { kind: 'manual', archive: true, send: (text) => sendToChannels(ready, text) },
+      { config, llm, archive: new Archive(config.archive.dir) },
+    );
+    if (result.status === 'sent') logger.info('早报已发送');
+    else process.exitCode = 1;
+  } finally {
+    await Promise.all(ready.map((channel) => channel.stop()));
+  }
+}
+
+async function start(): Promise<void> {
+  const config = await loadConfig();
+  await prepare(config);
+  const releaseLock = await acquireLock(config.paths.data_dir);
   const state = await loadState(config.paths.data_dir);
   const location = await getEffectiveLocation(config);
   logger.info(
     `配置加载成功：模型 ${config.ollama.model}，位置 ${location.city}（${location.timezone}），上次早报 ${state.lastBriefDate ?? '无'}`,
   );
-  // Telegram (brief:once and the bot) arrives in stage 5, the scheduler in stage 6.
-  if (mode === 'once') {
-    logger.error('brief:once 需要 Telegram，阶段 5 实现后可用；现在可以先用 npm run brief:dry');
-    process.exitCode = 1;
+
+  // Ollama may still be starting after a reboot; the check is retried on the first request.
+  const client = new OllamaClient(config.ollama);
+  await client.check().catch((error: unknown) => {
+    logger.warn(
+      `模型检查没有通过，先继续运行：${error instanceof LlmError ? error.message : String(error)}`,
+    );
+  });
+  const llm = new LlmService(client, config.ollama.num_ctx);
+  const core = new ChatCore({ config, llm, archive: new Archive(config.archive.dir) });
+  await core.restore();
+
+  const channels = createChannels(config);
+  const started: Channel[] = [];
+  for (const channel of channels) {
+    try {
+      await channel.start((text, io) => core.handle(text, io));
+      started.push(channel);
+    } catch (error) {
+      logger.error(`${CHANNEL_LABELS[channel.name]} 启动失败，请检查 token`, error);
+    }
   }
+
+  const shutdown = async (signal: string) => {
+    logger.info(`收到 ${signal}，正在退出`);
+    await Promise.allSettled(started.map((channel) => channel.stop()));
+    await releaseLock();
+    process.exit(0);
+  };
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+
+  if (started.length === 0) {
+    await releaseLock();
+    throw new Error('没有一个聊天渠道启动成功');
+  }
+  if (!started.some((channel) => channel.ready)) logger.info(NO_OWNER_HINT);
+  // The scheduler arrives in stage 6.
 }
 
 async function main(): Promise<void> {
   const mode = parseMode(process.argv.slice(2));
   if (mode === 'dry') await dryRun();
-  else await start(mode);
+  else if (mode === 'once') await once();
+  else await start();
 }
 
 main().catch((error: unknown) => {
-  if (error instanceof ConfigError || error instanceof DataDirError || error instanceof LlmError) {
+  if (
+    error instanceof ConfigError ||
+    error instanceof DataDirError ||
+    error instanceof LlmError ||
+    error instanceof LockError
+  ) {
     logger.error(error.message);
   } else {
     logger.error('启动失败', error);

@@ -94,7 +94,7 @@ my-morning-brief/
 
 程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`logs/`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
 
-`package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但**不**更新 `lastBriefDate`，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
+`package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但不算任何一个定时，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
 
 ## 4. 配置文件 `config.example.toml`
 
@@ -123,10 +123,10 @@ num_ctx = 16384         # Ollama 默认上下文很短，超长时会静默截�
 keep_alive = "30m"      # 早报后模型保留在内存里，方便接着聊天
 
 [brief]
-time = "08:00"             # 按当前生效时区的当地时间发送
+# 发送时间不在这里设置：在聊天里用 /schedule add 08:00 设置（可以设多个），存在 data/schedules.json
 weekend_news = true        # false 时周末早报不抓新闻，也不包含新闻小节
-catch_up_until = "12:00"   # 电脑睡过了发送时间，醒来后在这个时间之前仍补发；必须晚于 time，不支持跨午夜
-retry_minutes = [2, 5, 10] # 生成或发送失败后的重试间隔（仍受 catch_up_until 限制）
+catch_up_hours = 4         # 电脑睡过了某个定时，醒来后几小时内仍补发；不超过下一个定时，也不跨过午夜
+retry_minutes = [2, 5, 10] # 生成或发送失败后的重试间隔（仍在补发窗口内）
 # 以下是“家”的时区和位置。旅行时可以在聊天里用 /city 临时切换，/home 恢复为这里的设置
 timezone = "Pacific/Auckland"
 city = "Auckland"
@@ -172,12 +172,12 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 #### 阶段 1：项目骨架、配置和持久化基础
 
 - 初始化项目：`git init`、package.json、tsconfig（strict、ESM、NodeNext）、eslint、prettier、vitest、.gitignore。
-- `infra/config/`：用 zod 定义 schema，提供默认值，校验失败时打印中文错误（比如“缺少 telegram.bot_token”）。`config.toml` 不存在时提示“请先复制 config.example.toml 为 config.toml”。还要校验 `brief.catch_up_until` 晚于 `brief.time`，时区是 luxon 能识别的有效 IANA 时区。环境变量覆盖和 `MORNING_BRIEF_CONFIG` 也在这里实现（见第 6 节“可移植性”）。
+- `infra/config/`：用 zod 定义 schema，提供默认值，校验失败时打印中文错误（比如“缺少 telegram.bot_token”）。`config.toml` 不存在时提示“请先复制 config.example.toml 为 config.toml”。还要校验时区是 luxon 能识别的有效 IANA 时区。（发送时间 `brief.time` 和 `catch_up_until` 在阶段 6 去掉了，定时改为在聊天里设置。）环境变量覆盖和 `MORNING_BRIEF_CONFIG` 也在这里实现（见第 6 节“可移植性”）。
 - `infra/logger.ts`：带时间戳，分 info、warn、error 三级，只写 stdout/stderr。所有输出（包括错误对象的 message 和 stack）都要经过脱敏：把 Telegram 和 Discord 的 bot token、每个 ics 链接和 `healthcheck_url` 替换成 `***`。grammY 的网络错误里会带 `https://api.telegram.org/bot<token>/...`，所以不能只靠“注意别打印”。
 - `infra/fs.ts`、`infra/state.ts`：按第 6 节“数据持久化”实现原子写入、`data_dir` 初始化、启动时清理残留临时文件、`state.json` 读写和损坏恢复。
 - `location/`：按第 6 节“位置和时区”实现 `getEffectiveLocation()`、`setLocationOverride()`、`clearLocationOverride()` 和 `searchCity(name, country?)`。后面所有需要时区或天气位置的地方都通过 `getEffectiveLocation()` 获取，不直接读 `config.brief.timezone`。
 
-**验收**：`npm run typecheck`、`npm run lint`、`npm test` 都通过；配置校验有测试，覆盖正常配置、缺字段、类型错误、`catch_up_until` 早于 `time`、环境变量覆盖。logger 脱敏有测试，覆盖包含 token 的错误 stack。`writeFileAtomic` 有测试，覆盖正常写入、写入中途抛错时原文件不变且临时文件被清理。`state.json` 损坏时能正常启动并保留损坏文件。`location/` 有测试，覆盖没有覆盖文件时用 config、有覆盖时用覆盖、清除后恢复、覆盖文件损坏时退回 config 并记 warn；`searchCity` 用 fixture 测试，覆盖英文城市名、按国家过滤、国家字段为空（如 Hong Kong）、没有结果。
+**验收**：`npm run typecheck`、`npm run lint`、`npm test` 都通过；配置校验有测试，覆盖正常配置、缺字段、类型错误、环境变量覆盖。logger 脱敏有测试，覆盖包含 token 的错误 stack。`writeFileAtomic` 有测试，覆盖正常写入、写入中途抛错时原文件不变且临时文件被清理。`state.json` 损坏时能正常启动并保留损坏文件。`location/` 有测试，覆盖没有覆盖文件时用 config、有覆盖时用覆盖、清除后恢复、覆盖文件损坏时退回 config 并记 warn；`searchCity` 用 fixture 测试，覆盖英文城市名、按国家过滤、国家字段为空（如 Hong Kong）、没有结果。
 
 #### 阶段 2：数据源
 
@@ -275,7 +275,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - `raw.json`：各数据源的结构化原始数据、是否成功、抓取时间，以及新闻编号到链接的映射；新闻部分还要记录全部候选、因发布时间过滤和跨天去重去掉的、挑选出的编号、最终早报里用到的编号，以及挑选方式，方便以后检查；
   - `input.txt`：当时给模型看的完整文本（提示词 + 数据），方便以后排查“模型为什么这么写”；
   - `brief.md`：最终发出的早报（链接已替换），文件开头写上生成时间、生效时区和城市、使用的模型、是否为降级早报。
-- **命名规则**：定时早报固定用 `raw.json`、`input.txt`、`brief.md`；手动生成的（`/brief`、`brief:once`）一律带后缀，例如 `brief-manual-093015.md`（时分秒），`raw.json` 和 `input.txt` 同理。这样手动早报不会被当成定时早报，同一分钟内多次生成也不会重名。
+- **命名规则**（阶段 6 支持一天多个定时后，定时早报改为 `brief-scheduled-0800.md` 这样带定时时间的名字，见阶段 6）：定时早报固定用 `raw.json`、`input.txt`、`brief.md`；手动生成的（`/brief`、`brief:once`）一律带后缀，例如 `brief-manual-093015.md`（时分秒），`raw.json` 和 `input.txt` 同理。这样手动早报不会被当成定时早报，同一分钟内多次生成也不会重名。
 - 所有文件都是普通文本，可以直接用编辑器或 Obsidian 打开。
 - `listArchiveDates()`、`readBrief(date)`、`readRaw(date)`：供 `/history` 和对话使用。优先返回定时早报的文件，没有时返回当天最新的手动早报。
 - `recentSelectedNewsLinks(days)`：读取最近几天（不含今天）所有 `raw.json`（包括手动的）里**最终早报用到的**新闻的规范化链接，供新闻挑选去重。读取或解析失败的文件跳过并记 warn，不能让早报失败。
@@ -290,7 +290,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 5. `archive` 为 true 时写归档（`kind` 是 `scheduled` 或 `manual`，决定文件名）；
 6. 调用 `send`（发到聊天渠道，或者 `brief:dry` 时打印到终端）。
 
-`runBrief` 返回结构化结果（生成好的早报、挑选出的新闻、是否降级、每一步是否成功），**不**自己更新 `lastBriefDate`，也不做重试；这些由调用方（阶段 6 的定时器）处理。生成成功但 `send` 失败时，结果里要带上已生成的早报，供定时器重发。
+`runBrief` 返回结构化结果（生成好的早报、挑选出的新闻、是否降级、每一步是否成功），**不**自己记录定时的发送情况，也不做重试；这些由调用方（阶段 6 的定时器）处理。生成成功但 `send` 失败时，结果里要带上已生成的早报，供定时器重发。
 
 **验收**：`npm run brief:dry` 能在终端打印原始数据和早报（需要本机有 Ollama）。归档有测试（用临时目录），覆盖写入、定时和手动的文件命名、同一天多次手动生成不重名、`readBrief` 优先返回定时早报、过期清理不删除保留期内的目录、`retention_days = 0` 时不删除、`recentSelectedNewsLinks` 只返回最终用到的链接并跳过损坏的文件。`runBrief` 有测试（mock 数据源、模型和 send），覆盖正常流程、`archive: false` 时不写归档、send 失败时结果里带有已生成的早报。
 
@@ -330,7 +330,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 | 命令 | 作用 |
 |---|---|
 | `/start` `/help` | 中文帮助 |
-| `/brief` | 立即生成并发送早报（`runBrief`，`kind = manual`）；**不**更新 `lastBriefDate`，所以不影响当天的定时早报 |
+| `/brief` | 立即生成并发送早报（`runBrief`，`kind = manual`）；不算任何一个定时，所以不影响当天的定时早报 |
 | `/todo` | 列出未完成待办 |
 | `/add 内容` | 添加待办；内容为空时提示用法 |
 | `/done 序号` | 完成待办，回复“已完成：<内容>”；序号无效时提示“先用 /todo 看看列表” |
@@ -361,24 +361,91 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 **验收**：Telegram formatter 有测试，覆盖转义、链接里的 `&`、分段（包括切分点附近有链接的情况，每段转换后的 HTML 标签都要成对）。Discord 分段有测试（每段不超过 2000 字符、不切断链接）。两个适配层各有测试（mock grammY context / discord.js 消息和 interaction），覆盖首次配置回复 id、陌生人被忽略、群消息和服务器频道消息被忽略、Discord slash 命令先 defer 再回复。单实例锁有测试（pid 活着时拒绝启动，pid 不存在时接管）。两个渠道都开时早报两边都收到、提问只回复到来源渠道。`commands.ts` 有测试，覆盖增删待办、序号无效、`/history` 日期解析和没有归档的日期、启动时从归档恢复今天的早报、模型忙时先回复排队提示、`/city` 成功切换并回复双时区时间、`/city` 没有结果时不修改、`/city Wellington` 的回复里列出其他时区不同的同名地点、`/city Wellington United Kingdom` 按国家选中英国、`/home` 恢复、切换位置后数据缓存失效、对话上下文里的新闻和当天早报是同一批且不触发重新抓取。
 
-#### 阶段 6：定时与补发
+#### 阶段 6：定时、补发和聊天设置定时
 
-`scheduler/`：
+`scheduler/`。一天可以有多个定时，每个定时都发**完整早报**；定时**只在聊天里设置**，`config.toml` 里没有发送时间（2026-11-04 和用户确认）。
+
+**定时的存储**
+
+- 定时存在 `data_dir/schedules.json`（`writeFileAtomic` 写入）：`{ "schedules": [{ "id", "time": "HH:MM", "days": "daily" | "weekdays" | "weekends", "createdAt" }] }`。`id` 创建时生成，之后不变，`state.json` 按它记录发送情况；`createdAt` 是创建时间（ISO，带偏移）。
+- 两种“没有定时”要区分：
+  - **从来没设置过**：没有 `schedules.json` 这个文件。启动时提醒用户设置（见下）。
+  - **用户有意清空**：文件存在，列表为空（`/schedule clear` 之后）。不提醒，`/schedule` 里照常显示“现在没有定时早报”。
+- 文件损坏时和 `state.json` 一样：改名保留、记 warn；按“有意清空”处理（不发早报，也不当作从来没设置过去提醒），并在下一次 `/schedule` 的回复里说明文件损坏、已备份。
+- 修改立即生效，不需要重启（定时器每次检查都重新读取）。`schedules.json` 是普通 JSON，也可以手动编辑。
+
+**首次设置提醒**
+
+- 启动时，如果没有 `schedules.json`，并且至少有一个 `ready` 的渠道，就给主人发一条：“还没有设置定时早报。用 /schedule add 08:00 设置一个，也可以加上“工作日”或“周末”，例如 /schedule add 07:30 工作日。”
+- **只提醒一次**：发出后在 `state.json` 里记 `schedulePromptSent: true`，以后重启（开机自启每天都可能重启）不再提醒。漏看了也没关系：`/schedule`、`/where` 和 `/help` 都会显示“还没有设置定时早报”。
+- 还没配置主人 id（没有 `ready` 渠道）时不提醒，等配置好重启后再提醒。提醒发送失败时不记为已提醒，下次启动再试。
+- 设好之前不会自动发早报；`/brief` 和 `brief:once` 照常能用。
+
+**聊天命令**（加进命令菜单和 Discord slash 命令，参数是一个可选的字符串）
+
+| 命令 | 作用 |
+|---|---|
+| `/schedule` | 按时间列出所有定时，例如 `1. 07:30 工作日`、`2. 09:00 周末`、`3. 18:00 每天`，并写明下一次是什么时候（当地时间和家里的时间）。没有定时时说明怎么添加 |
+| `/schedule add 18:00 工作日` | 添加定时；最后一项可以是 `每天`、`工作日`、`周末`，省略时是每天。时间必须是 `HH:MM` |
+| `/schedule remove 2` | 删除第 2 个；可以一次删多个，例如 `/schedule remove 1 3` |
+| `/schedule clear` | 删除全部定时（暂停自动早报），回复里提醒“现在没有定时早报了，用 /schedule add 添加” |
+
+- **添加时的检查**（不通过就拒绝，并说明原因）：
+  - 和已有定时有某一天会同时生效、并且时间相同（例如已有“08:00 每天”时再加“08:00 工作日”）：拒绝，否则那天会发两份。
+  - 和已有定时有某一天会同时生效、并且相隔不到 30 分钟（例如 08:00 和 08:05）：拒绝，否则前一个的补发和重试窗口太短。
+  - 最多 6 个定时。
+- **删除**：序号以 `/schedule` 列出的为准；有任何一个无效序号时整条命令不执行，提示先用 `/schedule` 看列表。被删除的定时如果还有没发完的重试或 `pendingBrief`，直接丢弃。
+- 每次增删后回复修改后的完整列表；删到一个不剩时提醒现在没有定时早报了。
+- 时间都是**当前生效时区**的当地时间，跟着 `/city` 走；“工作日”“周末”也按当前生效时区的星期几判断。
+
+**什么时候发**
 
 - 没有任何一个 `ready` 的渠道（都还没完成首次配置）时不启动定时器，只记一条 info 日志，否则会没有发送对象、白白耗光重试次数。
-- 发送：传给 `runBrief` 的 `send` 依次发给每个 `ready` 的渠道，有渠道失败时抛出带失败渠道名单的错误（成功的渠道不受影响）。
-- 每 30 秒检查一次：按**当前生效时区**（每次检查都重新调用 `getEffectiveLocation()`，切换位置后立即生效），当前时间已过 `brief.time`、早于 `catch_up_until`，并且 `state.json` 里的 `lastBriefDate` 不是今天，就调用 `runBrief`（`kind = scheduled`）并记录日期。这样电脑睡过了 8 点，醒来后也会补发，而且一天只发一次，重启也不会重复。
-- 切换时区可能让“今天”的日期往前或往后跳：往西切（比如奥克兰 → 上海），切换后的“今天”可能仍是已经发过的那天，按上面的规则自然跳过，不会重复发；往东切（回到奥克兰），日期可能前进一天，在发送窗口内就会正常发送。这两种情况都不需要特殊处理，但要有测试。
-- 用轮询检查，不用 cron 库，因为 cron 在 Mac 睡眠后会错过触发。
-- 时间判断写成纯函数 `shouldSendBrief(now, state, location, config)`，方便测试。
-- **失败重试**：Mac 刚醒来时网络或 Ollama 经常还没就绪，所以失败后不能立即记为已发送。在 `state.json` 里记录当天的失败次数和下次重试时间，按 `retry_minutes` 退避重试（重试也要在 `catch_up_until` 之前）：
-  - 模型失败但数据抓到了：重试用完后发送降级早报（`formatFallbackBrief`），记为已发送；
-  - 早报已经生成、只是发送失败：把生成好的早报存进 `state.json` 的 `pendingBrief`（带日期和**失败的渠道**），重试时**只重发给这些渠道，不重新抓数据和调用模型**，已经收到的渠道不会重复收到；重试用完后只记日志（发不出去也就没法提醒），记为已发送；
-  - 到了 `catch_up_until` 还没成功：停止重试，记一条 error 日志。
-  - 发送成功或放弃后清掉 `pendingBrief`；`pendingBrief` 的日期不是今天时直接丢弃。
-- **防止生成中途睡眠**：Mac 被 `pmset` 唤醒后，没有用户操作时很快会再次睡眠，而本地模型生成一份早报可能要几十秒到几分钟。从开始抓数据到发送完成，用 `caffeinate -i -w <本进程 pid>` 子进程持有防睡眠断言，结束后 kill 掉它。只在 `process.platform === 'darwin'` 时这样做，其他平台跳过；`caffeinate` 启动失败也只记 warn，不影响早报。
+- 每 30 秒检查一次，每次都重新调用 `getEffectiveLocation()` 和读取定时。用轮询，不用 cron 库，因为 cron 在 Mac 睡眠后会错过触发。
+- **发送窗口**：一个定时在某天的窗口从它的时间开始，持续 `brief.catch_up_hours` 小时，但不超过**当天会生效的**下一个定时的时间（比如“07:30 工作日”在周一不会被“09:00 周末”截断），也不跨过午夜。电脑睡过了定时，醒来后在窗口内仍会补发。因为窗口会被下一个定时截断，任何时刻最多只有一个定时在窗口内。
+- **新加的定时从下一次开始**：窗口开始时间早于 `createdAt` 的那一次不算（比如 10:30 加了一个 08:00，今天不会马上补发一份，明天 08:00 才第一次发）。
+- 一个定时在窗口内、当天生效、今天还没发过（`state.json` 按定时 id 记录发过的日期），就调用 `runBrief`（`kind = scheduled`）。
+- 切换时区可能让“今天”的日期往前或往后跳：往西切（比如奥克兰 → 上海），切换后的“今天”可能仍是已经发过的那天，按上面的规则自然跳过；往东切（回到奥克兰），日期可能前进一天，在窗口内就会正常发送。这两种情况都不需要特殊处理，但要有测试。
+- 时间判断写成纯函数 `dueSchedule(now, schedules, state, location, config)`，返回现在该发的定时或 null，方便测试。
+- 早报生成期间（不管是定时的还是 `/brief`）不会再开始另一份：定时到期时如果已经有早报在生成，等它结束再检查。定时早报通过 `ChatCore.trackBrief` 运行，所以期间提的问题会等早报发出后再回答；发出后调用 `ChatCore.onBrief`，让对话从这份早报开始。
+- 发送：传给 `runBrief` 的 `send` 用 `sendToChannels` 发给每个 `ready` 的渠道，有渠道失败时抛出 `SendError`（带失败渠道名单，成功的渠道不受影响）。
+- **至少发一次，偶尔可能重复**：先发送，成功后才在 `state.json` 记为已发送。如果恰好在这两步之间进程被杀，重启后会再发一份。这是有意的取舍：重复一份比漏掉一份好。
 
-**验收**：`shouldSendBrief` 有表驱动测试，覆盖发送时间前后、已经发过、超过补发截止时间、午夜后 `lastBriefDate` 是昨天、夏令时切换日、处于重试等待中、重试次数用完、切换到 `Asia/Shanghai` 后按上海时间 08:00 发送（即奥克兰时间 13:00）、往西切换后不重复发送、往东切换回家后正常发送。重试流程有测试（mock 模型失败两次后成功、一直失败走降级早报、发送失败后重试时不再调用模型、两个渠道只有一个失败时只重发给失败的那个）。没有 `ready` 渠道时定时器不启动。
+**同一天的新闻不重复**
+
+- 跨天去重（`recentUsedNewsLinks`）现在跳过当天的早报，一天发多份时 18:00 会重复 08:00 讲过的新闻。改成：前 `dedup_days` 天**加上今天已经发过的早报**（定时和手动都算）里实际提到的新闻都排除。
+
+**归档命名**
+
+- 定时早报不再固定叫 `brief.md`（一天只能存一份）：改成带定时时间，例如 `brief-scheduled-0800.md`、`raw-scheduled-0800.json`、`input-scheduled-0800.txt`；名字已存在时（比如删掉 08:00 又加了一个 08:00，当天又发了一份）加 `-2`，和手动早报一样。手动早报保持 `brief-manual-093015.md`。front matter 里加上 `schedule: "08:00 每天"`。
+- `readBrief` / `readRaw` 返回当天最早的一份定时早报，没有定时的再取最新的手动早报；`latestBrief` 不变。旧的 `brief.md` 仍然能读（当作当天的定时早报）。
+- `/history 日期`：那天有多份早报时，按时间顺序全部发出，每份开头注明“📜 11月2日 08:00 定时早报”或“手动早报”。
+
+**失败重试**
+
+- Mac 刚醒来时网络或 Ollama 经常还没就绪，所以失败后不能立即记为已发送。`state.json` 里**按定时 id** 记录当天的失败次数和下次重试时间，按 `retry_minutes` 退避重试（重试也要在这个定时的发送窗口内）：
+  - 模型失败但数据抓到了：重试用完后发送降级早报（`formatFallbackBrief`），记为已发送；
+  - 早报已经生成、只是发送失败：把生成好的早报存进 `state.json` 的 `pendingBrief`（带日期、定时 id 和**失败的渠道**），重试时**只重发给这些渠道，不重新抓数据和调用模型**，已经收到的渠道不会重复收到；重试用完后只记日志（发不出去也就没法提醒），记为已发送；
+  - 窗口结束还没成功：停止重试，记一条 error 日志。
+  - 发送成功或放弃后清掉 `pendingBrief`；`pendingBrief` 的日期不是今天，或者对应的定时已经被删除，直接丢弃。
+- 旧格式的 `state.json`（单个 `lastBriefDate`）直接丢弃那几个字段，不报错：设好定时之前本来就不会自动发早报。
+
+**配置的变化**
+
+- `config.toml` 的 `[brief]` 删掉 `time` 和 `catch_up_until`，新增 `catch_up_hours`（默认 4，必须大于 0、不超过 12）。
+- 旧配置里还有 `brief.time` 或 `brief.catch_up_until` 时，启动时记一条 warn（“brief.time 已经不用了，定时请在聊天里用 /schedule 设置”），不报错退出，也不能被 zod 悄悄丢掉不提。
+
+**防止生成中途睡眠**
+
+- Mac 被 `pmset` 唤醒后，没有用户操作时很快会再次睡眠，而本地模型生成一份早报可能要几十秒到几分钟。从开始抓数据到发送完成，用 `caffeinate -i -w <本进程 pid>` 子进程持有防睡眠断言，结束后 kill 掉它。只在 `process.platform === 'darwin'` 时这样做，其他平台跳过；`caffeinate` 启动失败也只记 warn，不影响早报。
+
+**优雅退出**（第 6 节“可移植性”的要求，有了定时器后在生成途中被停掉很常见，这一阶段实现）
+
+- 收到 SIGTERM/SIGINT 时：停止定时器（不再开始新的早报），断开聊天渠道的接收，等正在进行的早报或回复和文件写入完成，最多 30 秒，然后释放锁退出。超时就直接退出，记一条 warn；没写完的 `state.json` 不会损坏（原子写入），下次启动按“没发过”处理，会重新发。
+
+**其他要同步的地方**：`/help` 的帮助文字和命令菜单加上 `/schedule`；`/where` 显示下一次定时早报（没有定时时说明怎么设置）；README 写清楚定时只在聊天里设置、存在 `data/schedules.json`。
+
+**验收**：`dueSchedule` 有表驱动测试，覆盖：发送时间前后、已经发过、超过 `catch_up_hours`、窗口被当天生效的下一个定时截断、不被当天不生效的定时截断、窗口不跨午夜、工作日/周末判断（按当前生效时区的星期几）、新加的定时不补发当天已经过去的那次、午夜后日期变化、夏令时切换日、处于重试等待中、重试次数用完、切换到 `Asia/Shanghai` 后按上海时间发送、往西切换后不重复发送、往东切换回家后正常发送、没有定时时什么都不发。定时命令有测试：列表（包括还没设置过、清空之后）、添加（默认每天、工作日/周末、格式错误、同时生效的同一时间、相隔不到 30 分钟、不同时生效时可以相同时间、超过 6 个）、删除单个和多个、无效序号时整条不执行、clear、`schedules.json` 损坏时备份并不发早报。首次设置提醒有测试：没有文件时提醒一次、重启后不再提醒、清空后不提醒、没有 `ready` 渠道时不提醒、发送失败时下次再提醒。重试流程有测试（mock 模型失败两次后成功、一直失败走降级早报、发送失败后重试时不再调用模型、两个渠道只有一个失败时只重发给失败的那个、定时被删除后丢弃重试）。同一天第二份早报不重复第一份用过的新闻。归档：一天两份定时早报都能保存和读取，同名时加 `-2`，旧的 `brief.md` 仍能读取，`/history` 按顺序发出同一天的多份早报。旧配置里的 `brief.time` 会提示而不是报错。优雅退出时等正在生成的早报完成（用一个慢的 mock 模型测试）。没有 `ready` 渠道时定时器不启动。
 
 #### 阶段 7：开机自启和文档
 
@@ -390,7 +457,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   4. 首次运行获取 chat_id / Discord user_id；Discord 还要写建应用、建空服务器、邀请 bot 的步骤；
   5. `npm run brief:dry` 和 `/brief` 测试；
   6. 安装开机自启，查看日志；
-  7. 让 Mac 早上醒着：插电时防止自动睡眠，或者 `sudo pmset repeat wakeorpoweron MTWRFSU 07:55:00`。说明程序生成期间会自己用 `caffeinate` 防止再次睡眠，但 Mac 必须先被唤醒；如果中午 `catch_up_until` 之前都没醒，当天就不会补发；
+  7. 让 Mac 早上醒着：插电时防止自动睡眠，或者 `sudo pmset repeat wakeorpoweron MTWRFSU 07:55:00`。说明程序生成期间会自己用 `caffeinate` 防止再次睡眠，但 Mac 必须先被唤醒；如果过了补发窗口（`catch_up_hours`）都没醒，那个定时当天就不会补发；
   8. 如何获取 Google、Outlook、iCloud 日历的 .ics 链接（提醒这些链接等同于钥匙，不要泄露）；
   9. 查看历史早报：在聊天里用 `/history`，或者直接打开 `archive/日期/` 下的文件；定时和手动早报的文件名区别；说明 `retention_days`；
   10. 新闻来源：怎么找 RSS 地址（RSS 图标、`/feed` 等常见路径、网页源码里的 `application/rss+xml`、RSSHub），怎么用 `curl` 检查（压缩的 feed 要加 `--compressed`）；`max_age_hours`、`select_count` 和 `dedup_days` 的作用；怎么从 `raw.json` 看挑选结果；
@@ -458,7 +525,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - `getEffectiveLocation()` 返回 `{ timezone, city, region, country, latitude, longitude, isHome }`：有 `location.json` 时用它，否则用 config。`location.json` 损坏时记 warn 并退回 config，不能让程序启动失败。
 - **不使用 Mac 的系统时区**：Mac 留在奥克兰时系统时区不会跟着人走，部署到服务器后系统时区通常是 UTC，所以只认 `getEffectiveLocation()`。
 - 所有和“今天”有关的计算（定时、日历、归档目录名、数据缓存，以及阶段 8 的待办截止日期）都用当前生效时区。
-- 发送时间 `brief.time` 和 `catch_up_until` 始终是当前生效时区的当地时间。
+- 所有定时的时间和补发窗口始终按当前生效时区的当地时间计算。
 - `searchCity` 调用 `https://geocoding-api.open-meteo.com/v1/search?name=…&count=5&language=en`，返回结果里的 `name`、`admin1`（省/州）、`country`、`latitude`、`longitude`、`timezone`，超时 20 秒。
 - `location.json` 也通过 `writeFileAtomic` 写入。
 
@@ -504,7 +571,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - **结构**：每个用户一个容器，各自挂一个数据卷到容器里的 `data/`（`data_dir` 的默认值，例如 `/app/data`），各自一份 `config.toml`（用 `MORNING_BRIEF_CONFIG` 指向挂进来的文件），token 和用户 id 用环境变量。所有容器的 `ollama.host` 指向同一个 Ollama。
   - **每个用户要有自己的 bot token**：Telegram 同一个 token 只能一个进程长轮询（第二个 409）；Discord 允许多个连接，但每个容器都会收到所有人的私信再各自忽略，既浪费又容易出错。人多到一人一个 bot 管不过来时，再改成一个进程服务多个用户（按用户 id 分数据目录、对话记忆和 `/city` 位置），这是不小的重构，到时单独规划。
   - **Ollama 放在哪**：Mac 上的 Docker Desktop 用不了 GPU（Metal），所以 Ollama 在 Mac 本机运行，容器用 `http://host.docker.internal:11434` 连；Linux + NVIDIA 服务器上可以放进同一个 compose，用内部网络连（`http://ollama:11434`）。Ollama 没有身份验证，**不要把 11434 端口暴露到公网**。
-  - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的 `brief.time` 错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。
+  - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的定时（`/schedule`）错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。
   - **所有容器用同一个模型名和相同的 `num_ctx`**：模型名不同或 `num_ctx` 不同，Ollama 会反复卸载、重新加载模型，非常慢。`keep_alive` 按最长的设置。
   - **待办和 Obsidian**：`todo.md` 在容器的数据卷里；想用 Obsidian 编辑，要把那个文件挂进容器，或者只通过机器人管理。
   - **要做的事**：`Dockerfile`（`node:24-slim`，`npm ci --omit=dev` 之外要保留 `tsx`，非 root 用户运行，`STOPSIGNAL SIGTERM`）、`docker-compose.example.yml`（两个用户示例 + 可选的 Ollama 服务）、README 里的多用户部署说明；然后实测两三个容器同时生成早报的排队时间和内存占用。

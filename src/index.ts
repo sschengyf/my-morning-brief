@@ -1,6 +1,11 @@
 import { Archive } from './archive.js';
 import { runBrief } from './brief.js';
-import { CHANNEL_LABELS, sendToChannels, type Channel } from './chat/channel.js';
+import {
+  CHANNEL_LABELS,
+  sendToChannels,
+  type Channel,
+  type MessageHandler,
+} from './chat/channel.js';
 import { ChatCore } from './chat/commands.js';
 import { DiscordChannel } from './chat/discord.js';
 import { TelegramChannel } from './chat/telegram.js';
@@ -76,23 +81,64 @@ async function once(): Promise<void> {
   }
   const llm = await createLlm(config);
   // Send-only: no handler, so a running `npm start` keeps receiving the messages.
-  await Promise.all(ready.map((channel) => channel.start()));
+  const connected = await startChannels(ready);
   try {
+    if (connected.length === 0) throw new Error('没有一个聊天渠道连接成功');
     const result = await runBrief(
-      { kind: 'manual', archive: true, send: (text) => sendToChannels(ready, text) },
+      { kind: 'manual', archive: true, send: (text) => sendToChannels(connected, text) },
       { config, llm, archive: new Archive(config.archive.dir) },
     );
-    if (result.status === 'sent') logger.info('早报已发送');
+    if (result.status === 'sent' && connected.length === ready.length) logger.info('早报已发送');
     else process.exitCode = 1;
   } finally {
-    await Promise.all(ready.map((channel) => channel.stop()));
+    await stopChannels(connected);
   }
+}
+
+/** Starts each channel on its own; one that fails is stopped, logged and left out. */
+async function startChannels(channels: Channel[], handler?: MessageHandler): Promise<Channel[]> {
+  const started: Channel[] = [];
+  for (const channel of channels) {
+    try {
+      await channel.start(handler);
+      started.push(channel);
+    } catch (error) {
+      logger.error(`${CHANNEL_LABELS[channel.name]} 启动失败，请检查 token 和网络`, error);
+      await channel.stop().catch(() => undefined);
+    }
+  }
+  return started;
+}
+
+async function stopChannels(channels: Channel[]): Promise<void> {
+  await Promise.allSettled(channels.map((channel) => channel.stop()));
 }
 
 async function start(): Promise<void> {
   const config = await loadConfig();
   await prepare(config);
   const releaseLock = await acquireLock(config.paths.data_dir);
+  const channels = createChannels(config);
+  // Registered before anything that can hang (a Discord login that never gets
+  // ready), so Ctrl-C always disconnects and releases the lock.
+  const shutdown = async (signal: string) => {
+    logger.info(`收到 ${signal}，正在退出`);
+    await stopChannels(channels);
+    await releaseLock();
+    process.exit(0);
+  };
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+  try {
+    await startBot(config, channels);
+  } catch (error) {
+    await stopChannels(channels);
+    await releaseLock();
+    throw error;
+  }
+}
+
+async function startBot(config: Config, channels: Channel[]): Promise<void> {
   const state = await loadState(config.paths.data_dir);
   const location = await getEffectiveLocation(config);
   logger.info(
@@ -110,30 +156,8 @@ async function start(): Promise<void> {
   const core = new ChatCore({ config, llm, archive: new Archive(config.archive.dir) });
   await core.restore();
 
-  const channels = createChannels(config);
-  const started: Channel[] = [];
-  for (const channel of channels) {
-    try {
-      await channel.start((text, io) => core.handle(text, io));
-      started.push(channel);
-    } catch (error) {
-      logger.error(`${CHANNEL_LABELS[channel.name]} 启动失败，请检查 token`, error);
-    }
-  }
-
-  const shutdown = async (signal: string) => {
-    logger.info(`收到 ${signal}，正在退出`);
-    await Promise.allSettled(started.map((channel) => channel.stop()));
-    await releaseLock();
-    process.exit(0);
-  };
-  process.once('SIGINT', () => void shutdown('SIGINT'));
-  process.once('SIGTERM', () => void shutdown('SIGTERM'));
-
-  if (started.length === 0) {
-    await releaseLock();
-    throw new Error('没有一个聊天渠道启动成功');
-  }
+  const started = await startChannels(channels, (text, io) => core.handle(text, io));
+  if (started.length === 0) throw new Error('没有一个聊天渠道启动成功');
   if (!started.some((channel) => channel.ready)) logger.info(NO_OWNER_HINT);
   // The scheduler arrives in stage 6.
 }

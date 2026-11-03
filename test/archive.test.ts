@@ -114,6 +114,18 @@ describe('Archive', () => {
     expect((await archive.readRaw('2026-11-03'))?.kind).toBe('scheduled');
   });
 
+  it('finds the most recently generated brief, scheduled or manual', async () => {
+    const archive = await archiveIn();
+    expect(await archive.latestBrief('2026-11-03')).toBeNull();
+    await archive.write(entry('2026-11-03', 'manual', '07:00:00'));
+    await archive.write(entry('2026-11-03', 'scheduled', '08:00:00'));
+    expect((await archive.latestBrief('2026-11-03'))?.text).toBe('早报 scheduled 08:00:00');
+    await archive.write(entry('2026-11-03', 'manual', '10:00:00'));
+    const latest = await archive.latestBrief('2026-11-03');
+    expect(latest?.text).toBe('早报 manual 10:00:00');
+    expect(latest?.raw.kind).toBe('manual');
+  });
+
   it('returns null for dates without a brief, or that are not dates', async () => {
     const archive = await archiveIn();
     expect(await archive.readBrief('2026-11-03')).toBeNull();

@@ -172,6 +172,7 @@ describe('parsing helpers', () => {
     expect(parseHistoryDate('12-25', today)).toBe('2025-12-25'); // not yet this year
     expect(parseHistoryDate('02-30', today)).toBeNull();
     expect(parseHistoryDate('last week', today)).toBeNull();
+    expect(parseHistoryDate('constructor', today)).toBeNull();
   });
 
   it('finds the next brief time in the given timezone', () => {
@@ -341,10 +342,11 @@ describe('ChatCore chat', () => {
     expect(chat[1]).toEqual({ role: 'assistant', content: '早报 [N2]' });
   });
 
-  it('also picks up a brief another process archived today', async () => {
+  it('switches to a newer brief that another process archived today', async () => {
     const first = await setup();
-    const second = await setup({ dataDir: first.config.paths.data_dir });
-    // A brief:once run while the bot is up.
+    const second = await setup({ dataDir: first.config.paths.data_dir, replies: ['早的早报'] });
+    await second.send('/brief');
+    // A brief:once run an hour later while the bot is up.
     await runBrief(
       { kind: 'manual', archive: true, send: async () => undefined },
       {
@@ -352,11 +354,20 @@ describe('ChatCore chat', () => {
         llm: new LlmService({ chat: async () => '外面的早报 [N1]' }, 16384),
         archive: first.archive,
         sources: first.sources,
-        now: () => NOW,
+        now: () => NOW.plus({ hours: 1 }),
       },
     );
+    second.advance({ hours: 1 });
     await second.send('早报说了什么');
-    expect(second.requests[0]![1]).toEqual({ role: 'assistant', content: '外面的早报 [N1]' });
+    expect(second.requests[1]![1]).toEqual({ role: 'assistant', content: '外面的早报 [N1]' });
+  });
+
+  it('keeps the conversation going after its own /brief', async () => {
+    const { send, requests } = await setup({ replies: ['早报', '一', '二'] });
+    await send('/brief');
+    await send('问题一');
+    await send('问题二');
+    expect(requests[2]!.slice(1).map((m) => m.content)).toEqual(['早报', '问题一', '一', '问题二']);
   });
 
   it('caches the data for 30 minutes, and drops it after a todo change or a city switch', async () => {
@@ -421,6 +432,20 @@ describe('ChatCore chat', () => {
     release();
     await Promise.all([brief, question]);
     expect(replied).toEqual(['正在生成早报，稍后回复你', '早报', '答案']);
+  });
+
+  it('does not start a second brief while one is being written', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { core, io, replied, counts } = await setup({ gate, replies: ['早报'] });
+    const first = core.handle('/brief', io);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await core.handle('/brief', io);
+    expect(replied).toEqual(['早报正在生成，好了会发到发起的那个对话里']);
+    release();
+    await first;
+    expect(counts.news).toBe(1);
+    expect(replied).toEqual(['早报正在生成，好了会发到发起的那个对话里', '早报']);
   });
 
   it('answers a question asked during /brief from the new brief', async () => {

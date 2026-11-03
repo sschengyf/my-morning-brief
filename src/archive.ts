@@ -136,6 +136,32 @@ export class Archive {
     return this.parseRaw(found.path);
   }
 
+  /**
+   * The most recently generated brief of a date, scheduled or manual, with its
+   * raw.json. Chat uses this, so a brief:once run from another process counts.
+   */
+  async latestBrief(date: string): Promise<{ text: string; raw: ArchiveRaw } | null> {
+    if (!DATE_DIR.test(date)) return null;
+    const dayDir = join(this.dir, date);
+    let latest: { suffix: string; raw: ArchiveRaw; at: number } | null = null;
+    for (const suffix of ['', ...(await this.manualSuffixes(dayDir))]) {
+      const path = join(dayDir, `raw${suffix}.json`);
+      if (!(await exists(path))) continue;
+      const raw = await this.parseRaw(path);
+      if (!raw) continue;
+      const at = DateTime.fromISO(raw.generatedAt).toMillis();
+      if (!latest || at > latest.at) latest = { suffix, raw, at };
+    }
+    if (!latest) return null;
+    try {
+      const text = await readFile(join(dayDir, `brief${latest.suffix}.md`), 'utf8');
+      return { text: stripFrontMatter(text).trim(), raw: latest.raw };
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
   private async findFile(
     date: string,
     prefix: 'brief' | 'raw',

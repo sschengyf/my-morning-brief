@@ -84,6 +84,7 @@ describe('runBrief', () => {
     expect(result).toMatchObject({
       status: 'sent',
       date: '2026-11-03',
+      generatedAt: '2026-11-03T08:00:00.000+13:00',
       text: '今天晴，看看 [原文](https://rnz.test/2)',
       fallback: false,
       archived: true,

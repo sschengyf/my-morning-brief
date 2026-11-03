@@ -71,6 +71,8 @@ export interface BriefRunResult {
   status: BriefStatus;
   /** Date in the effective timezone. */
   date: string;
+  /** When the brief was finished, as recorded in the archive. */
+  generatedAt: string;
   location: Location;
   /** The generated brief; present for send_failed so the scheduler can resend it. */
   text?: string;
@@ -168,16 +170,25 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
       if (newsRecord) newsRecord = { ...newsRecord, selected: news, usedIds: result.usedIds };
     } catch (error) {
       logger.error('生成早报失败', error);
-      return { ...base, status: 'llm_failed', news: [], fallback, archived: false, error };
+      return {
+        ...base,
+        status: 'llm_failed',
+        generatedAt: clock().setZone(location.timezone).toISO()!,
+        news: [],
+        fallback,
+        archived: false,
+        error,
+      };
     }
   }
 
+  const generatedAt = clock().setZone(location.timezone).toISO()!;
   let archived = false;
   if (options.archive) {
     const raw: ArchiveRaw = {
       version: 1,
       kind: options.kind,
-      generatedAt: clock().setZone(location.timezone).toISO()!,
+      generatedAt,
       location: { city: location.city, timezone: location.timezone, isHome: location.isHome },
       model: config.ollama.model,
       fallback,
@@ -198,7 +209,7 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
     }
   }
 
-  const result = { ...base, text, input, news, fallback, archived };
+  const result = { ...base, generatedAt, text, input, news, fallback, archived };
   try {
     await options.send(text);
   } catch (error) {

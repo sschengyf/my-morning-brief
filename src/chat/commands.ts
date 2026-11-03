@@ -78,6 +78,8 @@ export interface ChatDeps extends BriefDeps {
 
 interface TodayBrief {
   date: string;
+  /** Epoch ms, to tell whether the archive holds a newer brief. */
+  generatedAt: number;
   /** The brief with links turned back into ids, as the model wrote it. */
   text: string;
   news: NumberedNews[];
@@ -120,7 +122,8 @@ export class ChatCore {
   onBrief(result: BriefRunResult): void {
     if (result.text === undefined) return;
     const text = linksToIds(result.text, result.news);
-    this.today = { date: result.date, text, news: result.news };
+    const generatedAt = DateTime.fromISO(result.generatedAt).toMillis();
+    this.today = { date: result.date, generatedAt, text, news: result.news };
     this.history = [{ role: 'assistant', content: text }];
   }
 
@@ -204,6 +207,11 @@ export class ChatCore {
   }
 
   private async brief(io: ChatIO): Promise<void> {
+    // A second brief right now would only repeat the first, and both would be archived.
+    if (this.briefInFlight) {
+      await io.reply('早报正在生成，好了会发到发起的那个对话里');
+      return;
+    }
     await this.noticeIfBusy(io);
     const stop = io.typing();
     let result: BriefRunResult;
@@ -265,7 +273,7 @@ export class ChatCore {
     const now = this.clock();
     const location = await this.location();
     const date = now.setZone(location.timezone).toISODate()!;
-    if (this.today?.date !== date) await this.loadToday(date);
+    await this.loadToday(date);
     const data = await this.data(now, location, date);
     const news = this.today?.news ?? [];
     const text = gatherText({
@@ -312,16 +320,22 @@ export class ChatCore {
     );
   }
 
+  /**
+   * Makes `today` the latest brief of `date`: keeps the one in memory unless
+   * the archive has a newer one (brief:once runs in another process), and
+   * drops it once the date has moved on.
+   */
   private async loadToday(date: string): Promise<void> {
-    const { archive } = this.deps;
-    const [brief, raw] = await Promise.all([archive.readBrief(date), archive.readRaw(date)]);
-    if (!brief) {
-      this.today = null;
+    const stored = await this.deps.archive.latestBrief(date);
+    const current = this.today?.date === date ? this.today : null;
+    const storedAt = stored ? DateTime.fromISO(stored.raw.generatedAt).toMillis() : -Infinity;
+    if (!stored || (current && current.generatedAt >= storedAt)) {
+      this.today = current;
       return;
     }
-    const news = raw?.news?.selected ?? [];
-    const text = linksToIds(brief.text, news);
-    this.today = { date, text, news };
+    const news = stored.raw.news?.selected ?? [];
+    const text = linksToIds(stored.text, news);
+    this.today = { date, generatedAt: storedAt, text, news };
     if (this.history[0]?.content !== text) this.history = [{ role: 'assistant', content: text }];
   }
 
@@ -457,7 +471,8 @@ function formatTime(time: DateTime): string {
 export function parseHistoryDate(text: string, today: DateTime): string | null {
   const relative: Record<string, number> = { 今天: 0, 昨天: 1, 前天: 2 };
   const trimmed = text.trim();
-  if (trimmed in relative) return today.minus({ days: relative[trimmed]! }).toISODate();
+  if (Object.hasOwn(relative, trimmed))
+    return today.minus({ days: relative[trimmed]! }).toISODate();
 
   let match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(trimmed);
   if (match) {

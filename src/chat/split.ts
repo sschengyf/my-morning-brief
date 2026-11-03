@@ -50,9 +50,15 @@ function splitLine(line: string, limit: number, measure: (chunk: string) => numb
   const pieces: string[] = [];
   let rest = line;
   while (measure(rest) > limit) {
-    // Longest prefix that fits.
-    let end = rest.length;
-    while (end > 1 && measure(rest.slice(0, end)) > limit) end--;
+    // Longest prefix that fits, by binary search: `measure` may convert the whole text.
+    let fits = 1;
+    let tooLong = rest.length;
+    while (tooLong - fits > 1) {
+      const middle = Math.floor((fits + tooLong) / 2);
+      if (measure(rest.slice(0, middle)) <= limit) fits = middle;
+      else tooLong = middle;
+    }
+    const end = fits;
     pieces.push(rest.slice(0, breakPoint(rest, end)));
     rest = rest.slice(pieces.at(-1)!.length);
   }

@@ -1,5 +1,5 @@
 import type { DateTime } from 'luxon';
-import type { Location } from '../location/index.js';
+import type { Location } from '#/location/index.js';
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
 

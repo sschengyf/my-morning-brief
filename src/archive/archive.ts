@@ -6,7 +6,7 @@ import {
   isNotFound,
   type Logger,
   writeFileAtomic,
-} from '../infra/index.js';
+} from '#/infra/index.js';
 import { frontMatter, stripFrontMatter } from './front-matter.js';
 import type { ArchiveEntry, ArchiveRaw, BriefKind, StoredBrief } from './types.js';
 

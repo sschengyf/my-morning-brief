@@ -1,15 +1,15 @@
 import { DateTime } from 'luxon';
-import type { Archive, ArchiveRaw, BriefKind, NewsRecord, ScheduleRef } from '../archive/index.js';
-import { type Config, logger as defaultLogger, type Logger } from '../infra/index.js';
-import { BRIEF_PROMPT, type BriefData, type LlmService } from '../llm/index.js';
-import { getEffectiveLocation, type Location } from '../location/index.js';
+import type { Archive, ArchiveRaw, BriefKind, NewsRecord, ScheduleRef } from '#/archive/index.js';
+import { type Config, logger as defaultLogger, type Logger } from '#/infra/index.js';
+import { BRIEF_PROMPT, type BriefData, type LlmService } from '#/llm/index.js';
+import { getEffectiveLocation, type Location } from '#/location/index.js';
 import {
   formatNews,
   gatherText,
   includeNews,
   type NumberedNews,
   numberNews,
-} from '../sources/index.js';
+} from '#/sources/index.js';
 import { defaultSources, type Sources } from './data-sources.js';
 import { FALLBACK_NEWS_COUNT, formatFallbackBrief } from './fallback.js';
 import { selectNews } from './select-news.js';

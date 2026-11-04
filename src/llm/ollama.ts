@@ -1,6 +1,6 @@
 import { Ollama } from 'ollama';
-import type { Config } from '../infra/index.js';
-import { describeError } from '../sources/index.js';
+import type { Config } from '#/infra/index.js';
+import { describeError } from '#/sources/index.js';
 import { type ChatMessage, type LlmClient, LlmError } from './types.js';
 
 const CHECK_TIMEOUT_MS = 20_000;

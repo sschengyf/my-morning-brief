@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeTempDir, recordingLogger } from '../../test/helpers.js';
-import type { Channel, ChannelName } from '../chat/channel.js';
-import { saveSchedules } from '../schedules/store.js';
+import type { Channel, ChannelName } from '#/chat/channel.js';
+import { saveSchedules } from '#/schedules/store.js';
 import { remindToSchedule } from './prompt.js';
 import { loadState } from './state.js';
 

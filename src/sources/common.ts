@@ -1,4 +1,4 @@
-import { redact } from '../infra/index.js';
+import { redact } from '#/infra/index.js';
 
 /** What every data source returns; see PLAN.md stage 2. */
 export interface SourceResult<Raw> {

@@ -1,6 +1,6 @@
 import type { DateTime } from 'luxon';
 import { z } from 'zod';
-import type { Location } from '../../location/index.js';
+import type { Location } from '#/location/index.js';
 import { describeError, fetchOk, type SourceResult } from '../common.js';
 import { describeWeatherCode } from './codes.js';
 import { formatWeather } from './format.js';

@@ -1,6 +1,6 @@
 import type { DateTime } from 'luxon';
-import type { BriefDeps } from '../../brief/index.js';
-import type { CityMatch, Location } from '../../location/index.js';
+import type { BriefDeps } from '#/brief/index.js';
+import type { CityMatch, Location } from '#/location/index.js';
 import type { ChatIO } from '../channel.js';
 
 export interface ChatDeps extends BriefDeps {

@@ -5,6 +5,9 @@
   "packageManager": "pnpm@12.9.1",
   "description": "本地模型生成的每日早报，通过 Telegram 或 Discord 推送",
   "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
   "engines": {
     "node": ">=22"
   },

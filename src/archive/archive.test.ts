@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { makeTempDir, recordingLogger } from '../../test/helpers.js';
-import type { NumberedNews } from '../sources/news/types.js';
+import type { NumberedNews } from '#/sources/news/types.js';
 import { Archive } from './archive.js';
 import type { ArchiveEntry, ArchiveRaw, BriefKind } from './types.js';
 

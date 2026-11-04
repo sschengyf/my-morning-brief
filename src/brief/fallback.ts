@@ -1,5 +1,5 @@
-import { type BriefData, sanitizeOutput } from '../llm/index.js';
-import { dateLine, numberNews } from '../sources/index.js';
+import { type BriefData, sanitizeOutput } from '#/llm/index.js';
+import { dateLine, numberNews } from '#/sources/index.js';
 
 export const FALLBACK_NEWS_COUNT = 5;
 

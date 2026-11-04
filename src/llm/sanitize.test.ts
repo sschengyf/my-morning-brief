@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { NewsItem, NumberedNews } from '../sources/news/types.js';
+import type { NewsItem, NumberedNews } from '#/sources/news/types.js';
 import { sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
 
 function newsItem(id: number, overrides: Partial<NewsItem> = {}): NewsItem {

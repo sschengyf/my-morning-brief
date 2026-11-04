@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { NewsItem } from '../../sources/news/types.js';
+import type { NewsItem } from '#/sources/news/types.js';
 import { linksToIds } from './links.js';
 
 function item(n: number): NewsItem {

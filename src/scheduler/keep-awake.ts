@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { logger as defaultLogger, type Logger } from '../infra/index.js';
+import { logger as defaultLogger, type Logger } from '#/infra/index.js';
 
 /**
  * Keeps a Mac awake until the returned function is called: after a pmset

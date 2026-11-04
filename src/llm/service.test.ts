@@ -1,8 +1,8 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
 import { recordingLogger } from '../../test/helpers.js';
-import type { Location } from '../location/effective.js';
-import type { NewsItem, NumberedNews } from '../sources/news/types.js';
+import type { Location } from '#/location/effective.js';
+import type { NewsItem, NumberedNews } from '#/sources/news/types.js';
 import { BRIEF_PROMPT } from './prompts.js';
 import { type BriefData, estimateTokens, LlmService } from './service.js';
 import type { LlmClient } from './types.js';

@@ -1,9 +1,9 @@
-import { Archive } from '../archive/index.js';
-import { type Channel, ChatCore } from '../chat/index.js';
-import { acquireLock, type Config, loadConfig, logger } from '../infra/index.js';
-import { LlmError, LlmService, OllamaClient } from '../llm/index.js';
-import { getEffectiveLocation } from '../location/index.js';
-import { remindToSchedule, Scheduler } from '../scheduler/index.js';
+import { Archive } from '#/archive/index.js';
+import { type Channel, ChatCore } from '#/chat/index.js';
+import { acquireLock, type Config, loadConfig, logger } from '#/infra/index.js';
+import { LlmError, LlmService, OllamaClient } from '#/llm/index.js';
+import { getEffectiveLocation } from '#/location/index.js';
+import { remindToSchedule, Scheduler } from '#/scheduler/index.js';
 import {
   cleanupLeftovers,
   createChannels,

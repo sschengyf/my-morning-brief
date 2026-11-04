@@ -1,4 +1,4 @@
-import { logger as defaultLogger, type Logger } from '../infra/index.js';
+import { logger as defaultLogger, type Logger } from '#/infra/index.js';
 import { CHANNEL_LABELS, type ChannelName, type ChatIO, type MessageHandler } from './channel.js';
 
 /** The reply to anyone who writes before an owner id is configured. */

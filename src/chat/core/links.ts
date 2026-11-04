@@ -1,4 +1,4 @@
-import type { NumberedNews } from '../../sources/index.js';
+import type { NumberedNews } from '#/sources/index.js';
 
 /**
  * Turns "[原文](link)" back into "[N2]" for the conversation history, so the

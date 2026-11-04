@@ -8,17 +8,17 @@ import {
   readFixture,
   recordingLogger,
 } from '../../../test/helpers.js';
-import { Archive } from '../../archive/archive.js';
-import type { Sources } from '../../brief/data-sources.js';
-import { runBrief } from '../../brief/run.js';
-import { parseConfig } from '../../infra/config/parse.js';
-import { LlmService } from '../../llm/service.js';
-import type { ChatMessage, LlmClient } from '../../llm/types.js';
-import { searchCity } from '../../location/geocoding.js';
-import type { NewsItem } from '../../sources/news/types.js';
+import { Archive } from '#/archive/archive.js';
+import type { Sources } from '#/brief/data-sources.js';
+import { runBrief } from '#/brief/run.js';
+import { parseConfig } from '#/infra/config/parse.js';
+import { LlmService } from '#/llm/service.js';
+import type { ChatMessage, LlmClient } from '#/llm/types.js';
+import { searchCity } from '#/location/geocoding.js';
+import type { NewsItem } from '#/sources/news/types.js';
 import type { ChatIO } from '../channel.js';
-import { saveSchedules } from '../../schedules/store.js';
-import type { Schedule } from '../../schedules/types.js';
+import { saveSchedules } from '#/schedules/store.js';
+import type { Schedule } from '#/schedules/types.js';
 import { ChatCore } from './chat-core.js';
 
 // Tuesday 3 Nov 2026, 10:00 in Auckland.

@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
-import type { Config } from '../infra/index.js';
-import type { Location } from '../location/index.js';
+import type { Config } from '#/infra/index.js';
+import type { Location } from '#/location/index.js';
 import {
   fetchCalendar,
   fetchNews,
@@ -8,7 +8,7 @@ import {
   fetchWeather,
   type NewsFetchResult,
   type SourceResult,
-} from '../sources/index.js';
+} from '#/sources/index.js';
 
 /** The data sources, replaceable in tests. */
 export interface Sources {

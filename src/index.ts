@@ -1,6 +1,6 @@
-import { dryRun, once, start } from './app/index.js';
-import { ConfigError, DataDirError, LockError, logger } from './infra/index.js';
-import { LlmError } from './llm/index.js';
+import { dryRun, once, start } from '#/app/index.js';
+import { ConfigError, DataDirError, LockError, logger } from '#/infra/index.js';
+import { LlmError } from '#/llm/index.js';
 
 type Mode = 'start' | 'once' | 'dry';
 

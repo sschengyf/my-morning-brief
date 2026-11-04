@@ -4,7 +4,7 @@ import {
   DiscordChannel,
   type MessageHandler,
   TelegramChannel,
-} from '../chat/index.js';
+} from '#/chat/index.js';
 import {
   cleanupTempFiles,
   type Config,
@@ -12,8 +12,8 @@ import {
   logger,
   registerSecrets,
   secretsOf,
-} from '../infra/index.js';
-import { LlmService, OllamaClient } from '../llm/index.js';
+} from '#/infra/index.js';
+import { LlmService, OllamaClient } from '#/llm/index.js';
 
 export async function prepare(config: Config): Promise<void> {
   registerSecrets(secretsOf(config));

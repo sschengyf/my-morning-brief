@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
-import type { Location } from '../../location/effective.js';
+import type { Location } from '#/location/effective.js';
 import { describeWeatherCode } from './codes.js';
 import { fetchWeather } from './fetch.js';
 import { readFixture } from '../../../test/helpers.js';

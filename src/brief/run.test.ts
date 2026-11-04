@@ -3,12 +3,12 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { makeTempDir, minimalRawConfig, recordingLogger } from '../../test/helpers.js';
-import { Archive } from '../archive/archive.js';
-import type { ArchiveRaw } from '../archive/types.js';
-import { parseConfig } from '../infra/config/parse.js';
-import { LlmService } from '../llm/service.js';
-import type { LlmClient } from '../llm/types.js';
-import type { NewsItem } from '../sources/news/types.js';
+import { Archive } from '#/archive/archive.js';
+import type { ArchiveRaw } from '#/archive/types.js';
+import { parseConfig } from '#/infra/config/parse.js';
+import { LlmService } from '#/llm/service.js';
+import type { LlmClient } from '#/llm/types.js';
+import type { NewsItem } from '#/sources/news/types.js';
 import type { Sources } from './data-sources.js';
 import { type BriefDeps, runBrief } from './run.js';
 

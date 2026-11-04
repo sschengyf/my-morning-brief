@@ -1,5 +1,5 @@
-import { homeLocation, type Location } from '../../location/index.js';
-import { loadSchedules, nextOccurrence } from '../../schedules/index.js';
+import { homeLocation, type Location } from '#/location/index.js';
+import { loadSchedules, nextOccurrence } from '#/schedules/index.js';
 import type { CommandContext } from './context.js';
 import { formatTime } from './display.js';
 

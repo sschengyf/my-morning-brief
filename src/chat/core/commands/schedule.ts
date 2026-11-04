@@ -8,7 +8,7 @@ import {
   saveSchedules,
   sortSchedules,
   type Schedule,
-} from '../../../schedules/index.js';
+} from '#/schedules/index.js';
 import type { Command, CommandContext } from '../context.js';
 import { NO_SCHEDULES, nextBriefLine, SCHEDULE_PROMPT } from '../next-brief.js';
 

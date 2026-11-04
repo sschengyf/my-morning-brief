@@ -8,7 +8,7 @@ import {
   MessageFlags,
   Partials,
 } from 'discord.js';
-import { type Config, logger as defaultLogger, type Logger } from '../../infra/index.js';
+import { type Config, logger as defaultLogger, type Logger } from '#/infra/index.js';
 import { type Channel, type ChatIO, type MessageHandler, repeatTyping } from '../channel.js';
 import { dispatch } from '../dispatch.js';
 import { toDiscordMessages } from './format.js';

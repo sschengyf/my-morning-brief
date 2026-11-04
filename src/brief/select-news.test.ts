@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { NewsItem } from '../sources/news/types.js';
+import type { NewsItem } from '#/sources/news/types.js';
 import { selectNews } from './select-news.js';
 
 function item(source: string, n: number, hoursAgo: number | null = n): NewsItem {

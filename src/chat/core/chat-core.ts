@@ -1,9 +1,9 @@
 import { DateTime } from 'luxon';
-import { defaultSources, runBrief, type BriefRunResult } from '../../brief/index.js';
-import { logger as defaultLogger, type Logger } from '../../infra/index.js';
-import { LlmError } from '../../llm/index.js';
-import { getEffectiveLocation, type Location } from '../../location/index.js';
-import { formatNews, gatherText, type NumberedNews } from '../../sources/index.js';
+import { defaultSources, runBrief, type BriefRunResult } from '#/brief/index.js';
+import { logger as defaultLogger, type Logger } from '#/infra/index.js';
+import { LlmError } from '#/llm/index.js';
+import { getEffectiveLocation, type Location } from '#/location/index.js';
+import { formatNews, gatherText, type NumberedNews } from '#/sources/index.js';
 import type { ChatIO } from '../channel.js';
 import { historyCommand } from './commands/history.js';
 import { scheduleCommand } from './commands/schedule.js';

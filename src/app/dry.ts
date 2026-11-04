@@ -1,6 +1,6 @@
-import { Archive } from '../archive/index.js';
-import { runBrief } from '../brief/index.js';
-import { loadConfig, logger } from '../infra/index.js';
+import { Archive } from '#/archive/index.js';
+import { runBrief } from '#/brief/index.js';
+import { loadConfig, logger } from '#/infra/index.js';
 import { createLlm, prepare } from './setup.js';
 
 /** brief:dry — prints the gathered data and the brief; sends nothing, writes no archive. */

@@ -1,4 +1,4 @@
-import { logger as defaultLogger, type Logger } from '../infra/index.js';
+import { logger as defaultLogger, type Logger } from '#/infra/index.js';
 import {
   type FeedFailure,
   formatNews,
@@ -7,7 +7,7 @@ import {
   type NewsItem,
   type NumberedNews,
   numberNews,
-} from '../sources/index.js';
+} from '#/sources/index.js';
 import { BRIEF_PROMPT, CHAT_PROMPT } from './prompts.js';
 import { sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
 import type { ChatMessage, LlmClient } from './types.js';

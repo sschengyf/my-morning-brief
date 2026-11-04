@@ -32,6 +32,8 @@ const moduleBoundaries = {
       deep: '只能通过 {{module}}/index.ts 引用 {{module}} 模块，不要直接引用它内部的文件',
       layer: '{{from}} 不能依赖 {{to}}：依赖只能指向更底层的模块（{{order}}）',
       unknown: '{{module}} 不在 eslint.config.js 的 LAYERS 列表里',
+      relative: '跨模块引用用 #/{{module}}/…，不要用相对路径',
+      self: '模块内部的文件用相对路径引用，不要用 #/',
     },
   },
   create(context) {
@@ -45,10 +47,20 @@ const moduleBoundaries = {
     }
     const check = (node) => {
       const spec = node.source?.value;
-      if (typeof spec !== 'string' || !spec.startsWith('.')) return;
-      const target = resolve(dirname(file), spec);
+      if (typeof spec !== 'string') return;
+      const viaSubpath = spec.startsWith('#/');
+      if (!viaSubpath && !spec.startsWith('.')) return;
+      // #/* maps to ./src/* (package.json "imports").
+      const target = viaSubpath ? resolve(SRC, spec.slice(2)) : resolve(dirname(file), spec);
       const to = moduleOf(target);
+      if (viaSubpath && to !== null && to === from) {
+        context.report({ node: node.source, messageId: 'self' });
+        return;
+      }
       if (to === null || to === from) return;
+      if (!viaSubpath) {
+        context.report({ node: node.source, messageId: 'relative', data: { module: to } });
+      }
       if (!isTest && relative(resolve(SRC, to), target) !== 'index.js') {
         context.report({ node: node.source, messageId: 'deep', data: { module: to } });
       }

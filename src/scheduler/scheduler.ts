@@ -1,14 +1,14 @@
 import { DateTime } from 'luxon';
-import { type BriefDeps, type BriefRunResult, runBrief } from '../brief/index.js';
+import { type BriefDeps, type BriefRunResult, runBrief } from '#/brief/index.js';
 import {
   type Channel,
   type ChannelName,
   type ChatCore,
   SendError,
   sendToChannels,
-} from '../chat/index.js';
-import { logger as defaultLogger, type Logger } from '../infra/index.js';
-import { getEffectiveLocation } from '../location/index.js';
+} from '#/chat/index.js';
+import { logger as defaultLogger, type Logger } from '#/infra/index.js';
+import { getEffectiveLocation } from '#/location/index.js';
 import {
   describeSchedule,
   dueSchedule,
@@ -16,7 +16,7 @@ import {
   type Schedule,
   type ScheduleWindow,
   windowsOn,
-} from '../schedules/index.js';
+} from '#/schedules/index.js';
 import { keepAwake as defaultKeepAwake } from './keep-awake.js';
 import { loadState, type PendingBrief, saveState, type State } from './state.js';
 

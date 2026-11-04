@@ -1,4 +1,4 @@
-import type { NumberedNews } from '../sources/index.js';
+import type { NumberedNews } from '#/sources/index.js';
 
 /** Removes <think>…</think> blocks, and anything before a stray closing tag. */
 export function stripThink(text: string): string {

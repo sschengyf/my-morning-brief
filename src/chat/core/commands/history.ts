@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { StoredBrief } from '../../../archive/index.js';
+import type { StoredBrief } from '#/archive/index.js';
 import type { Command } from '../context.js';
 import { parseHistoryDate } from '../parse.js';
 

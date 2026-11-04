@@ -8,7 +8,7 @@ import {
   isNotFound,
   type Logger,
   writeFileAtomic,
-} from '../infra/index.js';
+} from '#/infra/index.js';
 
 export interface Location {
   city: string;

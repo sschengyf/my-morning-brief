@@ -8,7 +8,7 @@ import {
   isNotFound,
   type Logger,
   writeFileAtomic,
-} from '../infra/index.js';
+} from '#/infra/index.js';
 import type { Days, Schedule } from './types.js';
 
 export const SCHEDULES_FILE = 'schedules.json';

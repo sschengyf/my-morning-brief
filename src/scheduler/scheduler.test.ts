@@ -1,15 +1,15 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
 import { makeTempDir, minimalRawConfig, recordingLogger } from '../../test/helpers.js';
-import { Archive } from '../archive/archive.js';
-import type { Sources } from '../brief/data-sources.js';
-import type { BriefRunResult } from '../brief/run.js';
-import type { Channel, ChannelName } from '../chat/channel.js';
-import { parseConfig } from '../infra/config/parse.js';
-import { LlmService } from '../llm/service.js';
-import type { LlmClient } from '../llm/types.js';
-import { saveSchedules } from '../schedules/store.js';
-import type { Schedule } from '../schedules/types.js';
+import { Archive } from '#/archive/archive.js';
+import type { Sources } from '#/brief/data-sources.js';
+import type { BriefRunResult } from '#/brief/run.js';
+import type { Channel, ChannelName } from '#/chat/channel.js';
+import { parseConfig } from '#/infra/config/parse.js';
+import { LlmService } from '#/llm/service.js';
+import type { LlmClient } from '#/llm/types.js';
+import { saveSchedules } from '#/schedules/store.js';
+import type { Schedule } from '#/schedules/types.js';
 import { Scheduler } from './scheduler.js';
 import { loadState } from './state.js';
 

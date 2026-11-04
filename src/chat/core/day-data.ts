@@ -1,6 +1,6 @@
 import type { DateTime } from 'luxon';
-import type { Sources } from '../../brief/index.js';
-import type { Location } from '../../location/index.js';
+import type { Sources } from '#/brief/index.js';
+import type { Location } from '#/location/index.js';
 
 const DATA_TTL_MS = 30 * 60 * 1000;
 

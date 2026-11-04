@@ -1,6 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { isNotFound, writeFileAtomic } from '../../infra/index.js';
+import { isNotFound, writeFileAtomic } from '#/infra/index.js';
 import { oneLine } from '../common.js';
 
 export interface TodoItem {

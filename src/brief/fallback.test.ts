@@ -1,8 +1,8 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
-import type { BriefData } from '../llm/service.js';
-import type { Location } from '../location/effective.js';
-import type { NewsItem } from '../sources/news/types.js';
+import type { BriefData } from '#/llm/service.js';
+import type { Location } from '#/location/effective.js';
+import type { NewsItem } from '#/sources/news/types.js';
 import { formatFallbackBrief } from './fallback.js';
 
 function newsItem(id: number, overrides: Partial<NewsItem> = {}): NewsItem {

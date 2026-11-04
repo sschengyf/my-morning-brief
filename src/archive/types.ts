@@ -1,4 +1,4 @@
-import type { FeedFailure, NewsItem, NumberedNews } from '../sources/index.js';
+import type { FeedFailure, NewsItem, NumberedNews } from '#/sources/index.js';
 
 export type BriefKind = 'scheduled' | 'manual';
 

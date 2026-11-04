@@ -1,6 +1,6 @@
-import type { SelectionMethod } from '../archive/index.js';
-import type { Config } from '../infra/index.js';
-import type { NewsItem } from '../sources/index.js';
+import type { SelectionMethod } from '#/archive/index.js';
+import type { Config } from '#/infra/index.js';
+import type { NewsItem } from '#/sources/index.js';
 
 export interface NewsSelection {
   items: NewsItem[];

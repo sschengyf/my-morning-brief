@@ -1,4 +1,4 @@
-import { addTodo, completeTodo, formatTodos, listTodos } from '../../../sources/index.js';
+import { addTodo, completeTodo, formatTodos, listTodos } from '#/sources/index.js';
 import type { Command } from '../context.js';
 
 export const todoCommand: Command = async (_args, io, ctx) => {

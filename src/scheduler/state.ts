@@ -6,7 +6,7 @@ import {
   isNotFound,
   type Logger,
   writeFileAtomic,
-} from '../infra/index.js';
+} from '#/infra/index.js';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 

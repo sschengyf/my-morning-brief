@@ -5,7 +5,7 @@ import {
   setLocationOverride,
   type CityMatch,
   type Location,
-} from '../../../location/index.js';
+} from '#/location/index.js';
 import type { Command } from '../context.js';
 import { formatTime, placeName } from '../display.js';
 import { nextBriefLine } from '../next-brief.js';

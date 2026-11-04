@@ -90,6 +90,7 @@ my-morning-brief/
 **模块规则**（`eslint.config.js` 里的 `local/module-boundaries` 自动检查）：
 
 - `src/` 下每个顶层目录是一个模块。别的模块只能通过它的 `index.ts` 引用它，不能直接引用它内部的文件；`index.ts` 只导出别的模块真正用到的东西。模块内部的文件互相直接引用。
+- **跨模块用 `#/` 引用，模块内部用相对路径**：`import { logger } from '#/infra/index.js'`，`import { parseDays } from './rules.js'`。`#/*` 是 `package.json` 里 `imports` 字段定义的 Node subpath imports（指向 `./src/*`），Node、tsx、TypeScript、vitest 都直接支持，不用 tsconfig 的 `paths`（vitest 要另外配置，编译成 JS 后也不会改写）。这样一眼能看出哪些引用跨了模块。
 - 依赖只能指向更底层的模块：`infra → location → schedules → sources → llm → archive → brief → chat → scheduler → app`（左边最底层）。比如 `llm` 不能引用 `brief`，`sources` 不能引用 `llm`。新加模块时要把它放进这个顺序。
 - 文件和目录名用小写短横线（kebab-case），例如 `select-news.ts`、`chat-core.ts`。
 - 单元测试放在被测文件旁边，一个源文件对应一个测试文件，例如 `src/llm/sanitize.ts` 和 `src/llm/sanitize.test.ts`。测试可以直接引用别的模块内部的文件，方便单独测一个函数（模块边界规则对 `*.test.ts` 放宽这一条，依赖方向照样检查）。

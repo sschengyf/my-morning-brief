@@ -1,4 +1,4 @@
-import { logger as defaultLogger, type Logger } from '../infra/index.js';
+import { logger as defaultLogger, type Logger } from '#/infra/index.js';
 
 export type ChannelName = 'telegram' | 'discord';
 

@@ -1,8 +1,8 @@
 import { DateTime } from 'luxon';
-import type { Archive } from '../../archive/index.js';
-import type { BriefRunResult } from '../../brief/index.js';
-import type { ChatMessage } from '../../llm/index.js';
-import type { NumberedNews } from '../../sources/index.js';
+import type { Archive } from '#/archive/index.js';
+import type { BriefRunResult } from '#/brief/index.js';
+import type { ChatMessage } from '#/llm/index.js';
+import type { NumberedNews } from '#/sources/index.js';
 import { linksToIds } from './links.js';
 
 /** Ten rounds of question and answer. */

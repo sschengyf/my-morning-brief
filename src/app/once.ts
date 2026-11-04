@@ -1,7 +1,7 @@
-import { Archive } from '../archive/index.js';
-import { runBrief } from '../brief/index.js';
-import { sendToChannels } from '../chat/index.js';
-import { loadConfig, logger } from '../infra/index.js';
+import { Archive } from '#/archive/index.js';
+import { runBrief } from '#/brief/index.js';
+import { sendToChannels } from '#/chat/index.js';
+import { loadConfig, logger } from '#/infra/index.js';
 import {
   createChannels,
   createLlm,

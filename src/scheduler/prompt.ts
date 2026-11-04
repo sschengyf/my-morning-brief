@@ -1,6 +1,6 @@
-import { type Channel, SCHEDULE_PROMPT, SendError, sendToChannels } from '../chat/index.js';
-import { logger as defaultLogger, type Logger } from '../infra/index.js';
-import { loadSchedules } from '../schedules/index.js';
+import { type Channel, SCHEDULE_PROMPT, SendError, sendToChannels } from '#/chat/index.js';
+import { logger as defaultLogger, type Logger } from '#/infra/index.js';
+import { loadSchedules } from '#/schedules/index.js';
 import { loadState, saveState } from './state.js';
 
 /**

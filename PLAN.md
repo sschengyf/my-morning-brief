@@ -79,7 +79,9 @@ my-morning-brief/
 ├── config.example.toml
 ├── data/                       # 程序产生的数据（paths.data_dir 的默认值），不提交 git
 ├── todo.example.md             # 待办文件示例；真正的 todo.md 在 data/ 下
-├── scripts/install-autostart.sh
+├── Dockerfile                  # 阶段 7：镜像（node:24-slim，tsx 运行，非 root）
+├── compose.yaml                # 阶段 7：单人部署，挂载 config.toml 和 data/
+├── .dockerignore
 ├── package.json
 ├── tsconfig.json
 └── README.md                   # 中文
@@ -92,7 +94,7 @@ my-morning-brief/
 - 文件和目录名用小写短横线（kebab-case），例如 `select-news.ts`、`chat-core.ts`。
 - 单元测试放在被测文件旁边，一个源文件对应一个测试文件，例如 `src/llm/sanitize.ts` 和 `src/llm/sanitize.test.ts`。测试可以直接引用别的模块内部的文件，方便单独测一个函数（模块边界规则对 `*.test.ts` 放宽这一条，依赖方向照样检查）。
 
-程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`logs/`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
+程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`schedules.json`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
 
 `package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但不算任何一个定时，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
 
@@ -100,7 +102,7 @@ my-morning-brief/
 
 ```toml
 [paths]
-data_dir = "data"   # 程序产生的所有数据（state.json、location.json、todo.md、archive/、logs/、app.lock）都在这里；相对路径按项目根目录解析。Docker 把数据卷挂到这个目录
+data_dir = "data"   # 程序产生的所有数据（state.json、location.json、todo.md、archive/、schedules.json、app.lock）都在这里；相对路径按项目根目录解析。Docker 把数据卷挂到这个目录
 
 # 聊天渠道：至少开一个。两个都开时，早报两边都发；在哪边提问就在哪边回复
 [telegram]
@@ -163,7 +165,7 @@ retention_days = 90    # 超过天数的归档在每天发送早报后删除；0
 healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthchecks.io 的 ping 地址
 ```
 
-`config.toml`、`state.json`、`location.json`、`todo.md`、`archive/`、`logs/` 必须写进 `.gitignore`，因为它们包含 token、日历私密链接、所在城市、个人日程和待办。
+`config.toml`、`state.json`、`location.json`、`todo.md`、`archive/`（都在 `data/` 下）必须写进 `.gitignore`，因为它们包含 token、日历私密链接、所在城市、个人日程和待办。
 
 ## 5. 实现阶段
 
@@ -308,7 +310,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 - **首次配置**：主人 id 为空（Telegram `chat_id = 0`，Discord `user_id = ""`）时，任何人发消息，机器人都回复“你的 id 是：xxx，请填进 config.toml 的 telegram.chat_id / discord.user_id（或对应的环境变量）后重启”，不做其他事。
 - **只服务主人**：只处理**私聊/私信**里主人本人发来的消息；其他消息（包括群消息、Discord 服务器频道里的消息、别人的私信）一律忽略，并记一条日志。
-- **同时只能运行一个实例**：启动时在 `data_dir` 写 `app.lock`（内容是 pid）。锁文件存在且那个 pid 还活着就退出，并提示“另一个实例正在运行（可能是开机自启的那个），请先停掉其中一个”；pid 已经不存在就接管。Telegram 有 409 Conflict 兜底，但 Discord 允许同一个 token 多个连接，两个实例会各回复一遍，所以必须自己加锁。
+- **同时只能运行一个实例**：启动时在 `data_dir` 写 `app.lock`（内容是 pid）。锁文件存在且那个 pid 还活着就退出，并提示“另一个实例正在运行，请先停掉其中一个”；pid 已经不存在就接管。Telegram 有 409 Conflict 兜底，但 Discord 允许同一个 token 多个连接，两个实例会各回复一遍，所以必须自己加锁。
 
 **Telegram**（`chat/telegram/`，grammY 长轮询）：
 
@@ -377,7 +379,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 **首次设置提醒**
 
 - 启动时，如果没有 `schedules.json`，并且至少有一个 `ready` 的渠道，就给主人发一条：“还没有设置定时早报。用 /schedule add 08:00 设置一个，也可以加上“工作日”或“周末”，例如 /schedule add 07:30 工作日。”
-- **只提醒一次**：发出后在 `state.json` 里记 `schedulePromptSent: true`，以后重启（开机自启每天都可能重启）不再提醒。漏看了也没关系：`/schedule`、`/where` 和 `/help` 都会显示“还没有设置定时早报”。
+- **只提醒一次**：发出后在 `state.json` 里记 `schedulePromptSent: true`，以后重启（容器可能随时重启）不再提醒。漏看了也没关系：`/schedule`、`/where` 和 `/help` 都会显示“还没有设置定时早报”。
 - 还没配置主人 id（没有 `ready` 渠道）时不提醒，等配置好重启后再提醒。提醒发送失败时不记为已提醒，下次启动再试。
 - 设好之前不会自动发早报；`/brief` 和 `brief:once` 照常能用。
 
@@ -448,35 +450,56 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 **验收**：`dueSchedule` 有表驱动测试，覆盖：发送时间前后、已经发过、超过 `catch_up_hours`、窗口被当天生效的下一个定时截断、不被当天不生效的定时截断、窗口不跨午夜、工作日/周末判断（按当前生效时区的星期几）、新加的定时不补发当天已经过去的那次、午夜后日期变化、夏令时切换日、处于重试等待中、重试次数用完、切换到 `Asia/Shanghai` 后按上海时间发送、往西切换后不重复发送、往东切换回家后正常发送、没有定时时什么都不发。定时命令有测试：列表（包括还没设置过、清空之后）、添加（默认每天、工作日/周末、格式错误、同时生效的同一时间、相隔不到 30 分钟、不同时生效时可以相同时间、超过 6 个）、删除单个和多个、无效序号时整条不执行、clear、`schedules.json` 损坏时备份并不发早报。首次设置提醒有测试：没有文件时提醒一次、重启后不再提醒、清空后不提醒、没有 `ready` 渠道时不提醒、发送失败时下次再提醒。重试流程有测试（mock 模型失败两次后成功、一直失败走降级早报、发送失败后重试时不再调用模型、两个渠道只有一个失败时只重发给失败的那个、定时被删除后丢弃重试）。同一天第二份早报不重复第一份用过的新闻。归档：一天两份定时早报都能保存和读取，同名时加 `-2`，旧的 `brief.md` 仍能读取，`/history` 按顺序发出同一天的多份早报。旧配置里的 `brief.time` 会提示而不是报错。优雅退出时等正在生成的早报完成（用一个慢的 mock 模型测试）。没有 `ready` 渠道时定时器不启动。
 
-#### 阶段 7：开机自启和文档
+#### 阶段 7：Docker 部署和文档
 
-- `scripts/install-autostart.sh`：生成 `~/Library/LaunchAgents/com.<用户名>.morningbrief.plist`，设置 RunAtLoad、KeepAlive、ThrottleInterval 30，把 stdout 和 stderr 重定向到 `<data_dir>/logs/assistant.log`，然后用 `launchctl bootstrap gui/$(id -u)` 加载。加 `remove` 参数时卸载。脚本里要用 `which node` 得到的 node **绝对路径**和项目内 tsx 的绝对路径，因为 launchd 不会读取用户 shell 的 PATH（Homebrew 或 nvm 装的 node 会找不到）。如果检测到 node 路径在 `~/.nvm` 下，打印提示：升级或切换 node 版本后要重新运行本脚本。
-- `README.md`（中文），按顺序写：
-  1. 安装 Ollama，`ollama pull` 模型，模型名以 ollama.com/library 为准；
-  2. 用 @BotFather 创建机器人拿 token；
-  3. `pnpm install`，复制配置文件；
-  4. 首次运行获取 chat_id / Discord user_id；Discord 还要写建应用、建空服务器、邀请 bot 的步骤；
-  5. `pnpm brief:dry` 和 `/brief` 测试；
-  6. 安装开机自启，查看日志；
-  7. 让 Mac 早上醒着：插电时防止自动睡眠，或者 `sudo pmset repeat wakeorpoweron MTWRFSU 07:55:00`。说明程序生成期间会自己用 `caffeinate` 防止再次睡眠，但 Mac 必须先被唤醒；如果过了补发窗口（`catch_up_hours`）都没醒，那个定时当天就不会补发；
-  8. 如何获取 Google、Outlook、iCloud 日历的 .ics 链接（提醒这些链接等同于钥匙，不要泄露）；
-  9. 查看历史早报：在聊天里用 `/history`，或者直接打开 `archive/日期/` 下的文件；定时和手动早报的文件名区别；说明 `retention_days`；
-  10. 新闻来源：怎么找 RSS 地址（RSS 图标、`/feed` 等常见路径、网页源码里的 `application/rss+xml`、RSSHub），怎么用 `curl` 检查（压缩的 feed 要加 `--compressed`）；`max_age_hours`、`select_count` 和 `dedup_days` 的作用；怎么从 `raw.json` 看挑选结果；
-  11. 旅行时切换位置：`/city`、`/where`、`/home` 的用法；发送时间按当地 08:00；用英文城市名（比如 `/city Shanghai`），切错时加上国家（比如 `/city Wellington New Zealand`），回家直接 `/home`；
+2026-11-04 改为用 Docker 常驻运行，不做 launchd 开机自启：以后要一人一个容器（见第 7 节“多用户部署”），现在先在这台 Mac 的 Docker Desktop 上跑一个人。Ollama 继续在 Mac 本机运行（Docker Desktop 用不了 Metal GPU）。
+
+- **`Dockerfile`**：
+  - 基础镜像 `node:24-slim`，固定到具体版本；用 corepack 启用 `packageManager` 里固定的 pnpm，`pnpm install --frozen-lockfile --prod`。
+  - `tsx` 从 devDependencies 移到 dependencies（运行时就靠它），不另外编译。
+  - 只复制运行需要的文件（`package.json`、锁文件、`pnpm-workspace.yaml`、`tsconfig.json`、`src/`）。
+  - 用镜像自带的非 root 用户 `node` 运行；`CMD ["node", "--import", "tsx", "src/index.ts"]`，不经过 pnpm 或 tsx 的命令行包装，这样 Node 自己就是 1 号进程，直接收到 SIGTERM。
+- **`.dockerignore`**：排除 `node_modules/`、`data/`、`config.toml`、`**/*.test.ts`、`test/`、`.git/`、`.vscode/`。
+- **`compose.yaml`**（提交到 git，里面没有密钥）：
+  - 一个服务 `morning-brief`，`restart: unless-stopped`（进程崩溃或 Docker 重启后自动拉起，代替 launchd 的 KeepAlive）。
+  - 挂载 `./config.toml` 到 `/app/config.toml`（只读）、`./data` 到 `/app/data`：沿用现在的定时、归档和待办，`todo.md` 照样能在 Mac 上用 Obsidian 编辑。
+  - 环境变量 `MORNING_BRIEF_OLLAMA_HOST=http://host.docker.internal:11434`。
+  - `stop_grace_period: 40s`：Docker 默认 10 秒后强杀，程序退出时最多要等 30 秒。
+  - 日志用 json-file，`max-size: 10m`、`max-file: 3`，防止日志无限增长。
+  - `hostname: morning-brief`（用途见下面的锁）。
+- **新环境变量 `MORNING_BRIEF_OLLAMA_HOST`**：覆盖 `ollama.host`。同一份 `config.toml` 在 Mac 上直接 `pnpm brief:dry` 时连 `localhost`，在容器里连 `host.docker.internal`。不用 Ollama 自己的 `OLLAMA_HOST`：那个变量常被设成 `0.0.0.0` 这类不带协议的值，含义不同。
+- **单实例锁要能区分容器和本机**：`app.lock` 里加上主机名（`os.hostname()`）。锁的主机名和自己不同时，看不到对方进程是否还活着，就不接管，提示“`app.lock` 是另一台机器或容器（主机名 xxx）留下的；确认它已经停了再删掉这个文件”。原因：容器和 Mac 共用同一个 `data/`，本机的 `pnpm start` 和容器同时运行时，按现在的规则双方都会把对方的锁当成过期的（进程号查不到、开机时间不同），然后两边都回复。容器的主机名在 compose 里固定，重建容器后仍然一样；容器里程序总是 1 号进程，所以容器崩溃留下的锁会被新容器接管（进程号相同），不需要手动删。旧格式的锁（没有主机名）按同一台机器处理。
+- **Mac 必须醒着**：容器是 Linux，`keepAwake` 不会运行 `caffeinate`；`pmset` 定时唤醒后 Mac 一分钟左右又会睡着，来不及生成。所以 README 推荐插电时不睡眠（`sudo pmset -c sleep 0`，显示器照常关），并说明 Docker Desktop 要设为登录时启动。
+- **README（中文）**，按顺序写：
+  1. 准备：Docker Desktop（设为登录时启动）、Ollama（设为登录时启动，`ollama pull` 模型，模型名以 ollama.com/library 为准）、Node 24 和 pnpm（只用来在本机跑 `brief:dry` 和测试；只用 Docker 可以不装）；
+  2. 复制 `config.example.toml` 为 `config.toml`，填模型名、位置；
+  3. 创建 Discord 机器人（现有那一节）；Telegram 作为可选的一节（@BotFather），注明还没有实际验证过；
+  4. `pnpm brief:dry` 试一份早报（或 `docker compose run --rm morning-brief node --import tsx src/index.ts --dry`）；
+  5. `docker compose up -d --build` 启动，首次私信机器人拿到 user_id / chat_id，填进 `config.toml` 后 `docker compose restart`；`docker compose logs -f` 看日志；更新代码后重新 `up -d --build`；停止用 `docker compose down`；
+  6. 设置定时早报（现有那一节），`/brief` 测试；
+  7. 让 Mac 早上醒着：插电时不睡眠，原因见上；如果过了补发窗口（`catch_up_hours`）都没醒，那个定时当天就不会补发；
+  8. 获取 Google、Outlook、iCloud 日历的 .ics 链接（提醒这些链接等同于钥匙，不要泄露）；
+  9. 查看历史早报：`/history`，或直接打开 `data/archive/日期/`；定时和手动早报的文件名区别；`retention_days`；
+  10. 新闻来源：怎么找 RSS 地址（RSS 图标、`/feed` 等常见路径、网页源码里的 `application/rss+xml`、RSSHub），怎么用 `curl` 检查（压缩的 feed 要加 `--compressed`）；`max_age_hours`、`select_count`、`dedup_days` 的作用；怎么从 `raw.json` 看挑选结果；
+  11. 旅行时切换位置：`/city`、`/where`、`/home`；定时按当地时间走（`/schedule add 08:00` 在上海就是上海的 08:00）；用英文城市名，切错时加国家；
   12. **长时间外出前的检查清单**（Mac 留在家里无人照看）：
-      - 让 Mac 插电时永不睡眠：`sudo pmset -c sleep 0`（显示器可以照常关闭）。旅行时发送时间换算成奥克兰时间会变（比如北京时间 08:00 是奥克兰时间 13:00），原来的 `pmset` 唤醒时间就对不上了，一直醒着最省事；
+      - 插电时永不睡眠：`sudo pmset -c sleep 0`；旅行时定时按当地时间，换算成奥克兰时间会变，一直醒着最省事；
       - 停电后自动开机：`sudo pmset autorestart 1`；
-      - **重启后程序不一定会运行**：LaunchAgent 要有用户登录才会启动；开了 FileVault 时，开机会停在密码界面，程序和 Ollama 都不会运行，要等人回来输入密码。出门期间在“系统设置 → 通用 → 软件更新”里关掉自动安装更新，避免系统更新重启后卡住；
-      - Ollama 也要设为登录时自动启动；
-      - 准备远程登录：安装 Tailscale，开启“系统设置 → 通用 → 共享 → 远程登录”，出问题时可以 SSH 回去看日志、重启程序；
-      - 出发前演练一次：`/city` 切换到目的地，确认回复里的国家和发送时间正确，再 `/brief` 测试一次，确认天气已经换成目的地，最后 `/home` 切回来；
-      - 去中国大陆时，手机上收 Telegram 或 Discord（以及 Tailscale 远程登录）需要 VPN；Mac 留在奥克兰，抓取数据不受影响；
-  13. 常见问题：包括“409 Conflict”（开机自启的实例和手动 `pnpm start` 同时运行，先 `scripts/install-autostart.sh remove` 或停掉手动的那个）、“早报内容不全或胡编”（检查 `num_ctx`）、升级 node 后自启失效；
-  14. 隐私说明：推理在本地，但早报内容会经过 Telegram / Discord 的服务器；`archive/` 里保存了日程和待办的明文，不要放进同步盘或提交到 git；
-  15. 数据和备份：说明 `data_dir` 里有哪些文件、各自的作用；Mac 上靠 Time Machine；服务器上用云盘快照，或者每天用 `restic`/`rclone` 把 `data_dir` 备份到对象存储（给出一个 cron 示例，备份要加密，因为里面有日程和待办等私人数据）；Docker 必须把 `data_dir` 挂载成 volume；不要部署到 Cloud Run、Lambda 这类无状态平台。
-  - README 末尾加“设计说明”：日历库的选择结果（阶段 2）以及实现过程中按“选最简单、可测试的做法”自行决定的细节。
+      - **重启后程序不一定会运行**：Docker Desktop 和 Ollama 要有用户登录才会启动；开了 FileVault 时，开机会停在密码界面，要等人回来输入密码。出门期间关掉自动安装系统更新；
+      - 准备远程登录：Tailscale + “远程登录”，出问题时可以 SSH 回去 `docker compose logs`、`docker compose restart`；
+      - 出发前演练一次：`/city` 切到目的地，确认国家和下次早报时间，再 `/brief`，确认天气已经换成目的地，最后 `/home`；
+      - 去中国大陆时，手机上收 Telegram 或 Discord（以及 Tailscale）需要 VPN；Mac 留在奥克兰，抓取数据不受影响；
+  13. 常见问题：`app.lock` 提示另一个实例在运行（容器和本机 `pnpm start` 同时开着）；Telegram 409；容器连不上 Ollama（Ollama 没开、模型名不对）；早报内容不全或胡编（检查 `num_ctx`）；改了 `config.toml` 要 `docker compose restart`；
+  14. 隐私说明：推理在本地，但早报内容会经过 Discord / Telegram 的服务器；`data/` 里有日程和待办的明文，不要放进同步盘或提交到 git；
+  15. 数据和备份：`data/` 里有哪些文件、各自的作用；Mac 上靠 Time Machine；服务器上用云盘快照，或者每天用 `restic`/`rclone` 把 `data/` 加密备份到对象存储（给出一个 cron 示例）；不要部署到 Cloud Run、Lambda 这类无状态平台；
+  16. 多用户：怎么给第二个人复制一个服务（自己的 `config.toml`、`data` 目录、bot token、`hostname`），要点链接到 PLAN 第 7 节；
+  - README 末尾保留“设计说明”。
+- `data/README.md` 和 `config.example.toml` 里关于 `logs/` 的说明删掉（日志交给 Docker）。
 
-**验收**：在一台干净的 Mac 上，只按 README 的步骤操作，就能收到第一份早报。**第一批到此完成**，交给用户实际使用，等用户确认后再开始阶段 8。
+**验收**：
+- 单元测试：`MORNING_BRIEF_OLLAMA_HOST` 覆盖；锁遇到别的主机名不接管、遇到同主机名同进程号的旧锁接管、旧格式的锁照旧处理。
+- 实测：停掉本机的 `pnpm start`，`docker compose up -d --build` 后容器连上 Discord 和 Ollama，`/brief` 能收到早报，定时照常；`docker compose restart` 后日志里有正常退出的记录，没有重复发送；容器运行时在本机 `pnpm start` 会被锁拦下。
+- 在一台干净的 Mac 上，只按 README 的步骤操作，就能收到第一份早报。**第一批到此完成**，交给用户实际使用，等用户确认后再开始阶段 8。
 
 ### 第二批：增强功能（阶段 8）
 
@@ -517,7 +540,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - 所有面向用户的文字（机器人回复、错误提示、README）都用简体中文；代码标识符和注释用英文。
 - 不要把 token、chat_id、Discord user_id、日历链接打印到日志里；所有日志都经过 `infra/logger.ts` 统一脱敏（见阶段 1）。
 - 日志带时间戳，级别分 info、warn、error。
-- 未捕获的错误：`unhandledRejection` 只记 error 日志，进程继续运行；`uncaughtException` 记 error 日志后以非零状态码退出，由 launchd（以后是 systemd 或 Docker）重启。因为 Node 在 `uncaughtException` 之后内部状态不可靠，继续运行可能出现隐蔽问题；状态都在文件里，重启不会重复发送早报。可以预见的错误（网络、模型、文件读写）都要在业务代码里捕获，不能依赖这两个兜底。
+- 未捕获的错误：`unhandledRejection` 只记 error 日志，进程继续运行；`uncaughtException` 记 error 日志后以非零状态码退出，由 Docker（`restart: unless-stopped`）重启。因为 Node 在 `uncaughtException` 之后内部状态不可靠，继续运行可能出现隐蔽问题；状态都在文件里，重启不会重复发送早报。可以预见的错误（网络、模型、文件读写）都要在业务代码里捕获，不能依赖这两个兜底。
 - 依赖保持精简，不引入 Web 框架或数据库。
 
 ### 位置和时区
@@ -537,11 +560,11 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - **不依赖系统时区**：所有日期时间都通过 luxon 按当前生效时区计算，不能用 `new Date().getHours()`、`toLocaleString()` 这类依赖系统时区的写法。测试用 `TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍（`package.json` 里的 `test` 脚本直接这样做）。
 - **路径都可配置**：状态、位置、归档、日志、待办都放在 `paths.data_dir` 下，代码里不写死项目目录或 `~`。配置文件路径可以用环境变量 `MORNING_BRIEF_CONFIG` 指定。
 - **密钥可以走环境变量**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`、`DISCORD_BOT_TOKEN`、`DISCORD_USER_ID` 等环境变量优先于 config.toml，方便在服务器上用 secret 管理，不把 token 写进镜像。
-- **日志写到 stdout/stderr**：程序本身不写日志文件，由运行环境收集（launchd 重定向到文件，服务器上交给 systemd 或 Docker）。
-- **macOS 专属的东西隔离开**：`caffeinate`、launchd 脚本、`pmset` 说明只出现在各自的位置，并且按平台判断，主流程不依赖它们。
+- **日志写到 stdout/stderr**：程序本身不写日志文件，由运行环境收集（Docker 收集，`docker compose logs` 查看）。
+- **macOS 专属的东西隔离开**：`caffeinate`、`pmset` 说明只出现在各自的位置，并且按平台判断，主流程不依赖它们。
 - **模型调用走接口**：`llm/` 里的 `LlmClient` 接口，这次只实现 Ollama 版本。以后换成别的推理后端时只需要加一个实现，不改其他代码。
 - **优雅退出**：收到 SIGTERM/SIGINT 时停止长轮询、等当前的模型请求和文件写入完成（最多 30 秒）再退出。服务器和容器重启时会发这个信号。
-- **同一时间只跑一个实例**：迁移时先停掉 Mac 上的自启（`install-autostart.sh remove`），否则两边都会长轮询导致 409，还可能各发一份早报。`data_dir/app.lock` 只能防住同一个数据目录上的第二个实例，防不住两台机器各跑一个。
+- **同一时间只跑一个实例**：迁移时先停掉 Mac 上的容器（`docker compose down`），否则两边都会长轮询导致 409，还可能各发一份早报。`data_dir/app.lock` 只能防住同一个数据目录上的第二个实例（包括共用 `data/` 的容器和本机进程），防不住两台机器各用一份数据目录各跑一个。
 - **一个实例只服务一个人**：所有状态（数据目录、对话记忆、模型请求队列、锁）都按实例隔离，不要引入跨实例共享的全局状态或固定路径，这样以后可以一人一个容器（见第 7 节“多用户部署”）。
 
 ### 数据持久化
@@ -575,7 +598,8 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的定时（`/schedule`）错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。
   - **所有容器用同一个模型名和相同的 `num_ctx`**：模型名不同或 `num_ctx` 不同，Ollama 会反复卸载、重新加载模型，非常慢。`keep_alive` 按最长的设置。
   - **待办和 Obsidian**：`todo.md` 在容器的数据卷里；想用 Obsidian 编辑，要把那个文件挂进容器，或者只通过机器人管理。
-  - **要做的事**：`.dockerignore`（排除 `**/*.test.ts`、`test/`、`data/`、`config.toml`、`node_modules/`）、`Dockerfile`（`node:24-slim`，用 corepack 启用 `packageManager` 里固定的 pnpm 版本，`pnpm install --frozen-lockfile --prod` 之外要保留 `tsx`，非 root 用户运行，`STOPSIGNAL SIGTERM`）、`docker-compose.example.yml`（两个用户示例 + 可选的 Ollama 服务）、README 里的多用户部署说明；然后实测两三个容器同时生成早报的排队时间和内存占用。
-- **部署到服务器**：加 Dockerfile 和 systemd unit 示例（多用户时见上一条）。迁移前要先决定两件事：
+  - **已经做了**（阶段 7）：`Dockerfile`、`.dockerignore`、单人的 `compose.yaml`、README 里怎么加第二个人。
+  - **还要做的事**：实测两三个容器同时生成早报的排队时间和内存占用；Linux + NVIDIA 服务器上把 Ollama 放进同一个 compose 的示例。
+- **部署到服务器**：用阶段 7 的 Docker 镜像（多用户时见上一条）。迁移前要先决定两件事：
   - **模型放在哪里**：（a）服务器只跑机器人和定时任务，通过 Tailscale 等私有网络调用家里 Mac 上的 Ollama（模型仍在本地，但 Mac 必须醒着；连不上时走降级早报）；（b）租带 GPU 的服务器自己跑 Ollama（数据不出自己的机器，但费用高）；（c）改用云端模型 API（便宜、稳定，但违背“推理完全在本机”的初衷，日程和待办会发给模型服务商）。
   - **待办文件怎么同步**：服务器上的 `todo.md` 不再和本机 Obsidian 是同一个文件。可以只通过机器人管理待办，或者用 git、Syncthing 同步，需要处理两边同时修改的冲突。

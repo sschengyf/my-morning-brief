@@ -2,7 +2,8 @@
   "name": "my-morning-brief",
   "version": "0.1.0",
   "private": true,
-  "description": "本地模型生成的每日早报，通过 Telegram 推送",
+  "packageManager": "pnpm@12.9.1",
+  "description": "本地模型生成的每日早报，通过 Telegram 或 Discord 推送",
   "type": "module",
   "engines": {
     "node": ">=22"

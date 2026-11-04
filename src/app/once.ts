@@ -22,7 +22,7 @@ export async function once(): Promise<void> {
     return;
   }
   const llm = await createLlm(config);
-  // Send-only: no handler, so a running `npm start` keeps receiving the messages.
+  // Send-only: no handler, so a running `pnpm start` keeps receiving the messages.
   const connected = await startChannels(ready);
   try {
     if (connected.length === 0) throw new Error('没有一个聊天渠道连接成功');

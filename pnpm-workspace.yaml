@@ -1,0 +1,10 @@
+# pnpm settings (this is a single package, not a workspace).
+
+# `pnpm add x` writes an exact version (1.2.3, not ^1.2.3).
+saveExact: true
+
+# Dependency install scripts that may run. esbuild's postinstall only
+# double-checks its platform binary, which comes as a separate package
+# (@esbuild/darwin-arm64 etc.), so it is not needed.
+allowBuilds:
+  esbuild: false

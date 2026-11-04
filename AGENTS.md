@@ -17,12 +17,12 @@ Working rules for AI coding agents (and people) on this repo. `PLAN.md` is the s
 Run all of these before calling a change done:
 
 ```sh
-npm test          # vitest twice: TZ=UTC and TZ=Pacific/Auckland
-npm run lint      # eslint (including module boundaries) + prettier --check
-npm run typecheck
+pnpm test        # vitest twice: TZ=UTC and TZ=Pacific/Auckland
+pnpm lint        # eslint (including module boundaries) + prettier --check
+pnpm typecheck
 ```
 
-For anything touching data sources, the model or prompts, also run `npm run brief:dry` against real data and read the output. Chat features are verified by the user in Discord; ask them to try specific commands.
+For anything touching data sources, the model or prompts, also run `pnpm brief:dry` against real data and read the output. Chat features are verified by the user in Discord; ask them to try specific commands.
 
 ## Code layout
 
@@ -32,7 +32,7 @@ For anything touching data sources, the model or prompts, also run `npm run brie
 - File and folder names are kebab-case.
 - Unit tests sit next to the code they test: `src/llm/sanitize.ts` → `src/llm/sanitize.test.ts`, one test file per source file. Tests may import other modules' internal files (the boundary rule exempts `*.test.ts`; layering still applies). Shared helpers and fixtures live in `test/` (`test/helpers.ts`, `readFixture('news/rnz.xml')`).
 - Match the surrounding code: small functions, comments only where the reason is not obvious, prettier formatting.
-- Dependencies are pinned to exact versions (`.npmrc` has `save-exact=true`); install with `npm ci`.
+- Use **pnpm** (version pinned in `package.json` `packageManager`). Dependencies are pinned to exact versions (`saveExact` in `pnpm-workspace.yaml`); install with `pnpm install --frozen-lockfile`. Dependency build scripts are off unless listed in `allowBuilds`.
 
 ## Rules the code relies on
 

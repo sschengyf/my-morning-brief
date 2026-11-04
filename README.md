@@ -11,13 +11,13 @@
 3. 左边点 **Installation**：**Installation Contexts** 只勾 **Guild Install**；**Install Link** 选 **Discord Provided Link**；**Default Install Settings** 的 Scopes 选 `bot` 和 `applications.commands`，Permissions 选 `Send Messages`。保存。
 4. 在 Discord 里自己建一个服务器（左边栏的“+”→ 亲自创建 → 仅供我和我的朋友使用），只有你一个人也可以。
 5. 复制第 3 步页面上的 Install Link，在浏览器打开，把机器人加到这个服务器。你和机器人要在同一个服务器里，它才能私信你。
-6. 确认 `config.toml` 里 `[discord]` 的 `enabled = true`，`user_id` 先留空，运行 `npm start`。
-7. 在服务器成员列表里点机器人 → 发消息，随便发一句。它会回复你的用户 ID，把它填进 `discord.user_id`（要加引号），然后重启 `npm start`。
+6. 确认 `config.toml` 里 `[discord]` 的 `enabled = true`，`user_id` 先留空，运行 `pnpm start`。
+7. 在服务器成员列表里点机器人 → 发消息，随便发一句。它会回复你的用户 ID，把它填进 `discord.user_id`（要加引号），然后重启 `pnpm start`。
 8. 再发 `/help` 试试。输入 `/` 会弹出命令菜单（第一次注册后可能要等一会儿或重启 Discord 才出现）；直接打字发 `/todo` 这样的文字也可以。
 
 ## 设计说明
 
-代码按模块分目录，每个模块只通过 `index.ts` 对外，依赖只能指向更底层的模块；完整的目录说明和规则见 PLAN.md 第 3 节，`npm run lint` 会检查。
+代码按模块分目录，每个模块只通过 `index.ts` 对外，依赖只能指向更底层的模块；完整的目录说明和规则见 PLAN.md 第 3 节，`pnpm lint` 会检查。
 
 ### 日历库：node-ical
 
@@ -87,6 +87,6 @@ node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）�
 - Discord 的 slash 命令只允许在和机器人的私信里用；以 `/` 开头的普通文字也按命令处理。slash 命令要在 3 秒内确认，所以先 `deferReply`，生成完再编辑回复。
 - 消息先按段落、再按行切分（Telegram 按转换成 HTML 后的长度算 4000，Discord 2000），不会切断 `[原文](链接)`。Discord 每条消息都关掉链接预览，Telegram 也一样。
 - 两个渠道都开时，早报两边都发；一边发送失败不影响另一边，`SendError` 会列出失败的渠道（阶段 6 只对它们重发）。
-- `data_dir/app.lock` 保证同时只有一个 `npm start`：Discord 允许同一个 token 多个连接，两个实例会把每条消息回复两遍。进程意外退出留下的锁会被下次启动接管。`brief:once` 不加锁，它只发送、不接收消息。
+- `data_dir/app.lock` 保证同时只有一个 `pnpm start`：Discord 允许同一个 token 多个连接，两个实例会把每条消息回复两遍。进程意外退出留下的锁会被下次启动接管。`brief:once` 不加锁，它只发送、不接收消息。
 - 模型正在生成早报时提的问题，会等早报发出后再回答，用的是这份新早报的新闻。
 - 启动时 Ollama 检查不通过只记警告、继续运行（开机时 Ollama 可能还没起来），真正请求时再报错。

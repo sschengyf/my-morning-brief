@@ -177,7 +177,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - `infra/fs.ts`、`infra/state.ts`：按第 6 节“数据持久化”实现原子写入、`data_dir` 初始化、启动时清理残留临时文件、`state.json` 读写和损坏恢复。
 - `location/`：按第 6 节“位置和时区”实现 `getEffectiveLocation()`、`setLocationOverride()`、`clearLocationOverride()` 和 `searchCity(name, country?)`。后面所有需要时区或天气位置的地方都通过 `getEffectiveLocation()` 获取，不直接读 `config.brief.timezone`。
 
-**验收**：`npm run typecheck`、`npm run lint`、`npm test` 都通过；配置校验有测试，覆盖正常配置、缺字段、类型错误、环境变量覆盖。logger 脱敏有测试，覆盖包含 token 的错误 stack。`writeFileAtomic` 有测试，覆盖正常写入、写入中途抛错时原文件不变且临时文件被清理。`state.json` 损坏时能正常启动并保留损坏文件。`location/` 有测试，覆盖没有覆盖文件时用 config、有覆盖时用覆盖、清除后恢复、覆盖文件损坏时退回 config 并记 warn；`searchCity` 用 fixture 测试，覆盖英文城市名、按国家过滤、国家字段为空（如 Hong Kong）、没有结果。
+**验收**：`pnpm typecheck`、`pnpm lint`、`pnpm test` 都通过；配置校验有测试，覆盖正常配置、缺字段、类型错误、环境变量覆盖。logger 脱敏有测试，覆盖包含 token 的错误 stack。`writeFileAtomic` 有测试，覆盖正常写入、写入中途抛错时原文件不变且临时文件被清理。`state.json` 损坏时能正常启动并保留损坏文件。`location/` 有测试，覆盖没有覆盖文件时用 config、有覆盖时用覆盖、清除后恢复、覆盖文件损坏时退回 config 并记 warn；`searchCity` 用 fixture 测试，覆盖英文城市名、按国家过滤、国家字段为空（如 Hong Kong）、没有结果。
 
 #### 阶段 2：数据源
 
@@ -292,7 +292,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 `runBrief` 返回结构化结果（生成好的早报、挑选出的新闻、是否降级、每一步是否成功），**不**自己记录定时的发送情况，也不做重试；这些由调用方（阶段 6 的定时器）处理。生成成功但 `send` 失败时，结果里要带上已生成的早报，供定时器重发。
 
-**验收**：`npm run brief:dry` 能在终端打印原始数据和早报（需要本机有 Ollama）。归档有测试（用临时目录），覆盖写入、定时和手动的文件命名、同一天多次手动生成不重名、`readBrief` 优先返回定时早报、过期清理不删除保留期内的目录、`retention_days = 0` 时不删除、`recentSelectedNewsLinks` 只返回最终用到的链接并跳过损坏的文件。`runBrief` 有测试（mock 数据源、模型和 send），覆盖正常流程、`archive: false` 时不写归档、send 失败时结果里带有已生成的早报。
+**验收**：`pnpm brief:dry` 能在终端打印原始数据和早报（需要本机有 Ollama）。归档有测试（用临时目录），覆盖写入、定时和手动的文件命名、同一天多次手动生成不重名、`readBrief` 优先返回定时早报、过期清理不删除保留期内的目录、`retention_days = 0` 时不删除、`recentSelectedNewsLinks` 只返回最终用到的链接并跳过损坏的文件。`runBrief` 有测试（mock 数据源、模型和 send），覆盖正常流程、`archive: false` 时不写归档、send 失败时结果里带有已生成的早报。
 
 #### 阶段 5：聊天机器人（Telegram 和 Discord）
 
@@ -453,9 +453,9 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - `README.md`（中文），按顺序写：
   1. 安装 Ollama，`ollama pull` 模型，模型名以 ollama.com/library 为准；
   2. 用 @BotFather 创建机器人拿 token；
-  3. `npm install`，复制配置文件；
+  3. `pnpm install`，复制配置文件；
   4. 首次运行获取 chat_id / Discord user_id；Discord 还要写建应用、建空服务器、邀请 bot 的步骤；
-  5. `npm run brief:dry` 和 `/brief` 测试；
+  5. `pnpm brief:dry` 和 `/brief` 测试；
   6. 安装开机自启，查看日志；
   7. 让 Mac 早上醒着：插电时防止自动睡眠，或者 `sudo pmset repeat wakeorpoweron MTWRFSU 07:55:00`。说明程序生成期间会自己用 `caffeinate` 防止再次睡眠，但 Mac 必须先被唤醒；如果过了补发窗口（`catch_up_hours`）都没醒，那个定时当天就不会补发；
   8. 如何获取 Google、Outlook、iCloud 日历的 .ics 链接（提醒这些链接等同于钥匙，不要泄露）；
@@ -470,7 +470,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
       - 准备远程登录：安装 Tailscale，开启“系统设置 → 通用 → 共享 → 远程登录”，出问题时可以 SSH 回去看日志、重启程序；
       - 出发前演练一次：`/city` 切换到目的地，确认回复里的国家和发送时间正确，再 `/brief` 测试一次，确认天气已经换成目的地，最后 `/home` 切回来；
       - 去中国大陆时，手机上收 Telegram 或 Discord（以及 Tailscale 远程登录）需要 VPN；Mac 留在奥克兰，抓取数据不受影响；
-  13. 常见问题：包括“409 Conflict”（开机自启的实例和手动 `npm start` 同时运行，先 `scripts/install-autostart.sh remove` 或停掉手动的那个）、“早报内容不全或胡编”（检查 `num_ctx`）、升级 node 后自启失效；
+  13. 常见问题：包括“409 Conflict”（开机自启的实例和手动 `pnpm start` 同时运行，先 `scripts/install-autostart.sh remove` 或停掉手动的那个）、“早报内容不全或胡编”（检查 `num_ctx`）、升级 node 后自启失效；
   14. 隐私说明：推理在本地，但早报内容会经过 Telegram / Discord 的服务器；`archive/` 里保存了日程和待办的明文，不要放进同步盘或提交到 git；
   15. 数据和备份：说明 `data_dir` 里有哪些文件、各自的作用；Mac 上靠 Time Machine；服务器上用云盘快照，或者每天用 `restic`/`rclone` 把 `data_dir` 备份到对象存储（给出一个 cron 示例，备份要加密，因为里面有日程和待办等私人数据）；Docker 必须把 `data_dir` 挂载成 volume；不要部署到 Cloud Run、Lambda 这类无状态平台。
   - README 末尾加“设计说明”：日历库的选择结果（阶段 2）以及实现过程中按“选最简单、可测试的做法”自行决定的细节。
@@ -574,7 +574,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的定时（`/schedule`）错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。
   - **所有容器用同一个模型名和相同的 `num_ctx`**：模型名不同或 `num_ctx` 不同，Ollama 会反复卸载、重新加载模型，非常慢。`keep_alive` 按最长的设置。
   - **待办和 Obsidian**：`todo.md` 在容器的数据卷里；想用 Obsidian 编辑，要把那个文件挂进容器，或者只通过机器人管理。
-  - **要做的事**：`.dockerignore`（排除 `**/*.test.ts`、`test/`、`data/`、`config.toml`、`node_modules/`）、`Dockerfile`（`node:24-slim`，`npm ci --omit=dev` 之外要保留 `tsx`，非 root 用户运行，`STOPSIGNAL SIGTERM`）、`docker-compose.example.yml`（两个用户示例 + 可选的 Ollama 服务）、README 里的多用户部署说明；然后实测两三个容器同时生成早报的排队时间和内存占用。
+  - **要做的事**：`.dockerignore`（排除 `**/*.test.ts`、`test/`、`data/`、`config.toml`、`node_modules/`）、`Dockerfile`（`node:24-slim`，用 corepack 启用 `packageManager` 里固定的 pnpm 版本，`pnpm install --frozen-lockfile --prod` 之外要保留 `tsx`，非 root 用户运行，`STOPSIGNAL SIGTERM`）、`docker-compose.example.yml`（两个用户示例 + 可选的 Ollama 服务）、README 里的多用户部署说明；然后实测两三个容器同时生成早报的排队时间和内存占用。
 - **部署到服务器**：加 Dockerfile 和 systemd unit 示例（多用户时见上一条）。迁移前要先决定两件事：
   - **模型放在哪里**：（a）服务器只跑机器人和定时任务，通过 Tailscale 等私有网络调用家里 Mac 上的 Ollama（模型仍在本地，但 Mac 必须醒着；连不上时走降级早报）；（b）租带 GPU 的服务器自己跑 Ollama（数据不出自己的机器，但费用高）；（c）改用云端模型 API（便宜、稳定，但违背“推理完全在本机”的初衷，日程和待办会发给模型服务商）。
   - **待办文件怎么同步**：服务器上的 `todo.md` 不再和本机 Obsidian 是同一个文件。可以只通过机器人管理待办，或者用 git、Syncthing 同步，需要处理两边同时修改的冲突。

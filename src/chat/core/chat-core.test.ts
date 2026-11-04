@@ -17,6 +17,8 @@ import type { ChatMessage, LlmClient } from '../../llm/types.js';
 import { searchCity } from '../../location/geocoding.js';
 import type { NewsItem } from '../../sources/news/types.js';
 import type { ChatIO } from '../channel.js';
+import { saveSchedules } from '../../schedules/store.js';
+import type { Schedule } from '../../schedules/types.js';
 import { ChatCore } from './chat-core.js';
 
 // Tuesday 3 Nov 2026, 10:00 in Auckland.
@@ -84,11 +86,22 @@ interface Setup {
   /** Holds the model until released. */
   gate?: Promise<void>;
   dataDir?: string;
+  /** Defaults to one daily 08:00 schedule; null for "never set". */
+  schedules?: Schedule[] | null;
 }
+
+const DAILY_0800: Schedule = {
+  id: 'daily0800',
+  time: '08:00',
+  days: 'daily',
+  createdAt: '2026-10-01T00:00:00.000+13:00',
+};
 
 async function setup(options: Setup = {}) {
   const dataDir = options.dataDir ?? (await makeTempDir());
   const config = parseConfig({ ...minimalRawConfig(), paths: { data_dir: dataDir } });
+  const schedules = options.schedules === undefined ? [DAILY_0800] : options.schedules;
+  if (schedules && !options.dataDir) await saveSchedules(dataDir, schedules);
   const requests: ChatMessage[][] = [];
   const replies = [...(options.replies ?? [])];
   const client: LlmClient = {
@@ -170,7 +183,7 @@ describe('ChatCore commands', () => {
     advance({ days: 1 });
     expect((await send('/history'))[0]).toContain('最近有早报的日期：\n2026-11-03');
     expect(await send('/history 昨天')).toEqual([
-      '📜 2026-11-03 的早报\n\n好的 [原文](https://rnz.test/2)',
+      '📜 11月3日 10:00 手动早报\n\n好的 [原文](https://rnz.test/2)',
     ]);
     expect(await send('/history 10-01')).toEqual(['2026-10-01 没有归档的早报']);
     expect(await send('/history someday')).toEqual([
@@ -244,6 +257,150 @@ describe('ChatCore commands', () => {
     await send('/refresh');
     expect(counts.weather).toBe(2);
   });
+});
+
+describe('/schedule', () => {
+  const file = (dir: string) => join(dir, 'schedules.json');
+
+  it('asks to set one when never set, and says so in /where too', async () => {
+    const { send } = await setup({ schedules: null });
+    const prompt =
+      '还没有设置定时早报。用 /schedule add 08:00 设置一个，也可以加上“工作日”或“周末”，例如 /schedule add 07:30 工作日。';
+    expect(await send('/schedule')).toEqual([prompt]);
+    expect((await send('/where'))[0]).toContain(prompt);
+  });
+
+  it('adds schedules, daily by default, and lists them by time with the next one', async () => {
+    const { send, config } = await setup({ schedules: null });
+    expect((await send('/schedule add 18:00 工作日'))[0]).toBe(
+      [
+        '已添加 18:00 工作日。',
+        '',
+        '定时早报（Auckland 时间）：',
+        '1. 18:00 工作日',
+        '',
+        '下次早报：当地时间 11月3日 18:00。',
+      ].join('\n'),
+    );
+    await send('/schedule add 7:30');
+    expect(await send('/schedule')).toEqual([
+      [
+        '定时早报（Auckland 时间）：',
+        '1. 07:30 每天',
+        '2. 18:00 工作日',
+        '',
+        '下次早报：当地时间 11月3日 18:00。',
+      ].join('\n'),
+    ]);
+    const saved = JSON.parse(await readFile(file(config.paths.data_dir), 'utf8'));
+    expect(saved.schedules.map((x: Schedule) => [x.time, x.days, x.createdAt])).toEqual([
+      ['07:30', 'daily', '2026-11-03T10:00:00.000+13:00'],
+      ['18:00', 'weekdays', '2026-11-03T10:00:00.000+13:00'],
+    ]);
+  });
+
+  it('shows the next brief in both local and home time after /city', async () => {
+    const { send } = await setup();
+    await send('/city Shanghai');
+    expect((await send('/schedule'))[0]).toBe(
+      [
+        '定时早报（Shanghai 时间）：',
+        '1. 08:00 每天',
+        '',
+        '下次早报：当地时间 11月3日 08:00（Auckland 时间 11月3日 13:00）。',
+      ].join('\n'),
+    );
+  });
+
+  it('rejects bad input and clashing schedules without saving', async () => {
+    const { send, config } = await setup();
+    const before = await readFile(file(config.paths.data_dir), 'utf8');
+    expect(await send('/schedule add 8am')).toEqual([
+      '时间格式不对，例如 /schedule add 08:00 或 /schedule add 07:30 工作日',
+    ]);
+    expect(await send('/schedule add 09:00 周一')).toEqual([
+      '最后一项可以是 每天、工作日 或 周末，例如 /schedule add 07:30 工作日',
+    ]);
+    expect((await send('/schedule add 08:00 工作日'))[0]).toContain('同一天不能在同一时间发两份');
+    expect((await send('/schedule add 08:10'))[0]).toContain('至少要隔 30 分钟');
+    expect(await readFile(file(config.paths.data_dir), 'utf8')).toBe(before);
+  });
+
+  it('removes one or several by number, and nothing when any number is wrong', async () => {
+    const { send } = await setup();
+    await send('/schedule add 12:00');
+    await send('/schedule add 18:00');
+    expect(await send('/schedule remove 2 5')).toEqual([
+      '没有第 5 个定时，先用 /schedule 看看列表。',
+    ]);
+    expect(await send('/schedule remove')).toEqual([
+      '要写删第几个，例如 /schedule remove 2，先用 /schedule 看看列表。',
+    ]);
+    expect((await send('/schedule remove 1 3'))[0]).toBe(
+      [
+        '已删除 08:00 每天、18:00 每天。',
+        '',
+        '定时早报（Auckland 时间）：',
+        '1. 12:00 每天',
+        '',
+        '下次早报：当地时间 11月3日 12:00。',
+      ].join('\n'),
+    );
+    expect((await send('/schedule remove 1'))[0]).toBe(
+      '已删除 12:00 每天。\n\n现在没有定时早报，用 /schedule add 08:00 添加。',
+    );
+  });
+
+  it('clears all, which is not the same as never set', async () => {
+    const { send, config } = await setup();
+    expect(await send('/schedule clear')).toEqual([
+      '已删除全部定时。现在没有定时早报了，用 /schedule add 08:00 添加。',
+    ]);
+    expect(await send('/schedule')).toEqual(['现在没有定时早报，用 /schedule add 08:00 添加。']);
+    expect(JSON.parse(await readFile(file(config.paths.data_dir), 'utf8'))).toEqual({
+      schedules: [],
+    });
+  });
+
+  it('says when schedules.json was corrupt, until the list is edited', async () => {
+    const { send, config } = await setup({ schedules: null });
+    await writeFile(file(config.paths.data_dir), 'not json');
+    expect((await send('/schedule'))[0]).toMatch(
+      /^⚠️ schedules\.json 内容有误，已备份为 .*schedules\.json\.corrupt-.*，在重新设置之前不发定时早报。\n\n现在没有定时早报/,
+    );
+    await send('/schedule add 08:00');
+    expect((await send('/schedule'))[0]).not.toContain('内容有误');
+  });
+
+  it('explains the subcommands for anything else', async () => {
+    const { send } = await setup();
+    expect((await send('/schedule edit 1'))[0]).toMatch(/^用法：/);
+  });
+});
+
+it('/history sends every brief of a day in order', async () => {
+  const { send, archive, advance } = await setup({ replies: ['早上的', '中午的'] });
+  await runBrief(
+    {
+      kind: 'scheduled',
+      send: async () => undefined,
+      archive: true,
+      schedule: { id: 'daily0800', time: '08:00', label: '08:00 每天' },
+    },
+    {
+      config: parseConfig({ ...minimalRawConfig(), paths: { data_dir: join(archive.dir, '..') } }),
+      llm: new LlmService({ chat: async () => '早上的' }, 16384),
+      archive,
+      sources: countingSources().sources,
+      now: () => NOW.minus({ hours: 2 }),
+    },
+  );
+  await send('/brief');
+  advance({ days: 1 });
+  expect(await send('/history 昨天')).toEqual([
+    '📜 11月3日 08:00 定时早报\n\n早上的',
+    '📜 11月3日 10:00 手动早报\n\n早上的',
+  ]);
 });
 
 describe('ChatCore chat', () => {

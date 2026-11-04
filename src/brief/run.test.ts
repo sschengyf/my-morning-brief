@@ -82,7 +82,8 @@ async function setup(
 describe('runBrief', () => {
   it('gathers, writes, archives and sends the brief', async () => {
     const { deps, archive, calls, send } = await setup();
-    const result = await runBrief({ kind: 'scheduled', send, archive: true }, deps);
+    const schedule = { id: 'a1b2c3d4', time: '08:00', label: '08:00 每天' };
+    const result = await runBrief({ kind: 'scheduled', send, archive: true, schedule }, deps);
 
     expect(result).toMatchObject({
       status: 'sent',
@@ -110,7 +111,11 @@ describe('runBrief', () => {
       'https://rnz.test/1',
       'https://rnz.test/2',
     ]);
-    const input = await readFile(join(archive.dir, '2026-11-03', 'input.txt'), 'utf8');
+    expect(raw?.schedule).toEqual(schedule);
+    const input = await readFile(
+      join(archive.dir, '2026-11-03', 'input-scheduled-0800.txt'),
+      'utf8',
+    );
     expect(input.startsWith('你是用户的私人助理')).toBe(true);
     expect(input).toContain(calls[0]);
   });

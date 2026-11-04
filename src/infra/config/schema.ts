@@ -10,9 +10,6 @@ const PLACEHOLDER_BOT_TOKEN = '在这里填 BotFather 给你的 token';
 const PLACEHOLDER_DISCORD_TOKEN = '在这里填 Discord Developer Portal 里 Bot 页面的 token';
 const PLACEHOLDER_MODEL = '填你的模型名';
 
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-const time = z.string().regex(TIME_PATTERN, '格式应为 HH:MM，例如 08:00');
 const timezone = z
   .string()
   .refine((value) => IANAZone.isValidZone(value), '不是有效的 IANA 时区，例如 Pacific/Auckland');
@@ -56,21 +53,16 @@ export const schema = z.object({
   }),
   brief: z
     .object({
-      time: time.default('08:00'),
       weekend_news: z.boolean().default(true),
-      catch_up_until: time.default('12:00'),
+      // Send times are not here: they are set in chat with /schedule (data/schedules.json).
+      catch_up_hours: z.number().positive().max(12).default(4),
       retry_minutes: z.array(positiveInt).default([2, 5, 10]),
       timezone: timezone.default('Pacific/Auckland'),
       city: z.string().min(1).default('Auckland'),
       latitude: z.number().min(-90).max(90).default(-36.85),
       longitude: z.number().min(-180).max(180).default(174.76),
     })
-    .prefault({})
-    // HH:MM strings compare correctly as text.
-    .refine((brief) => brief.catch_up_until > brief.time, {
-      message: '必须晚于 brief.time（不支持跨午夜）',
-      path: ['catch_up_until'],
-    }),
+    .prefault({}),
   calendar: z.object({ ics_urls: z.array(z.string().min(1)).default([]) }).prefault({}),
   news: z
     .object({

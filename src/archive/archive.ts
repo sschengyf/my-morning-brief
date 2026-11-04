@@ -13,12 +13,21 @@ import type { ArchiveEntry, ArchiveRaw, BriefKind, StoredBrief } from './types.j
 const DATE_DIR = /^\d{4}-\d{2}-\d{2}$/;
 /** Parsed raw.json files kept in memory; chat checks today's on every question. */
 const RAW_CACHE_SIZE = 50;
-const MANUAL_BRIEF = /^brief-manual-(\d{6}(?:-\d+)?)\.md$/;
+// brief-scheduled-0800.md, brief-manual-093015.md, brief-manual-093015-2.md; plain brief.md
+// is a scheduled brief from before there could be several a day.
+const BRIEF_FILE = /^brief(?:-(scheduled|manual)-(\d{4}|\d{6})(-\d+)?)?\.md$/;
+
+interface BriefFile {
+  /** "" for brief.md, else e.g. "-scheduled-0800"; shared by raw, input and brief. */
+  suffix: string;
+  kind: BriefKind;
+}
 
 /**
- * Daily folders of plain files, e.g. archive/2026-11-03/brief.md. Scheduled
- * briefs use fixed names; manual ones (/brief, brief:once) carry their time,
- * so they never pass for the scheduled one or overwrite each other.
+ * Daily folders of plain files, e.g. archive/2026-11-03/brief-scheduled-0800.md.
+ * Every brief's files carry its kind and time, so a day can hold several
+ * scheduled briefs and any number of manual ones (/brief, brief:once), and
+ * none overwrites another.
  */
 export class Archive {
   private readonly rawCache = new Map<
@@ -35,8 +44,7 @@ export class Archive {
   async write(entry: ArchiveEntry): Promise<string> {
     const dayDir = join(this.dir, entry.date);
     await mkdir(dayDir, { recursive: true });
-    const suffix =
-      entry.raw.kind === 'scheduled' ? '' : await this.freeManualSuffix(dayDir, entry.raw);
+    const suffix = await this.freeSuffix(dayDir, entry.raw);
 
     const briefPath = join(dayDir, `brief${suffix}.md`);
     await writeFileAtomic(
@@ -48,11 +56,19 @@ export class Archive {
     return briefPath;
   }
 
-  /** "-manual-093015", or "-manual-093015-2" when that second is taken. */
-  private async freeManualSuffix(dayDir: string, raw: ArchiveRaw): Promise<string> {
-    const time = DateTime.fromISO(raw.generatedAt, { setZone: true }).toFormat('HHmmss');
+  /**
+   * "-scheduled-0800" (the schedule's time) or "-manual-093015" (the time it
+   * was made), with "-2" and so on when the name is taken: the same schedule
+   * deleted and added again can send twice in a day.
+   */
+  private async freeSuffix(dayDir: string, raw: ArchiveRaw): Promise<string> {
+    const generated = DateTime.fromISO(raw.generatedAt, { setZone: true });
+    const base =
+      raw.kind === 'scheduled'
+        ? `-scheduled-${(raw.schedule?.time ?? generated.toFormat('HH:mm')).replace(':', '')}`
+        : `-manual-${generated.toFormat('HHmmss')}`;
     for (let n = 1; ; n++) {
-      const suffix = n === 1 ? `-manual-${time}` : `-manual-${time}-${n}`;
+      const suffix = n === 1 ? base : `${base}-${n}`;
       if (!(await exists(join(dayDir, `brief${suffix}.md`)))) return suffix;
     }
   }
@@ -72,19 +88,61 @@ export class Archive {
       .reverse();
   }
 
-  /** The scheduled brief of a date, or else that day's latest manual one. */
+  /** The first scheduled brief of a date, or else that day's latest manual one. */
   async readBrief(date: string): Promise<StoredBrief | null> {
-    const found = await this.findFile(date, 'brief', '.md');
-    if (!found) return null;
-    const text = await readFile(found.path, 'utf8');
-    return { date, kind: found.kind, text: stripFrontMatter(text).trim(), file: found.path };
+    const found = await this.pick(date);
+    return found ? this.stored(date, found) : null;
   }
 
   /** raw.json of the same brief readBrief picks; null if missing or unreadable. */
   async readRaw(date: string): Promise<ArchiveRaw | null> {
-    const found = await this.findFile(date, 'raw', '.json');
-    if (!found) return null;
-    return this.parseRaw(found.path);
+    const found = await this.pick(date);
+    return found ? this.parseRaw(join(this.dir, date, `raw${found.suffix}.json`)) : null;
+  }
+
+  /** Every brief of a date, in the order they were made. */
+  async briefsOfDay(date: string): Promise<StoredBrief[]> {
+    if (!DATE_DIR.test(date)) return [];
+    const briefs = await Promise.all(
+      (await this.briefFiles(join(this.dir, date))).map((file) => this.stored(date, file)),
+    );
+    // Unreadable raws have no time; they keep their place by file name.
+    return briefs
+      .map((brief, index) => ({ brief, index }))
+      .sort((a, b) => {
+        const at = (x: StoredBrief) =>
+          x.generatedAt ? DateTime.fromISO(x.generatedAt).toMillis() : NaN;
+        const diff = at(a.brief) - at(b.brief);
+        return Number.isNaN(diff) ? a.index - b.index : diff;
+      })
+      .map(({ brief }) => brief);
+  }
+
+  private async pick(date: string): Promise<BriefFile | null> {
+    if (!DATE_DIR.test(date)) return null;
+    const files = await this.briefFiles(join(this.dir, date));
+    return (
+      files.find((f) => f.kind === 'scheduled') ??
+      files.filter((f) => f.kind === 'manual').at(-1) ??
+      null
+    );
+  }
+
+  private async stored(date: string, file: BriefFile): Promise<StoredBrief> {
+    const dayDir = join(this.dir, date);
+    const path = join(dayDir, `brief${file.suffix}.md`);
+    const [text, raw] = await Promise.all([
+      readFile(path, 'utf8'),
+      this.parseRaw(join(dayDir, `raw${file.suffix}.json`)),
+    ]);
+    return {
+      date,
+      kind: file.kind,
+      text: stripFrontMatter(text).trim(),
+      file: path,
+      ...(raw && { generatedAt: raw.generatedAt }),
+      ...(raw?.schedule && { schedule: raw.schedule.label }),
+    };
   }
 
   /**
@@ -111,32 +169,18 @@ export class Archive {
     return null;
   }
 
-  /** The readable raw.json files of a day folder: the scheduled one, then manual ones oldest first. */
+  /** The readable raw.json files of a day folder's briefs, in briefFiles order. */
   private async rawsOfDay(dayDir: string): Promise<{ suffix: string; raw: ArchiveRaw }[]> {
     const found: { suffix: string; raw: ArchiveRaw }[] = [];
-    for (const suffix of ['', ...(await this.manualSuffixes(dayDir))]) {
+    for (const { suffix } of await this.briefFiles(dayDir)) {
       const raw = await this.parseRaw(join(dayDir, `raw${suffix}.json`));
       if (raw) found.push({ suffix, raw });
     }
     return found;
   }
 
-  private async findFile(
-    date: string,
-    prefix: 'brief' | 'raw',
-    extension: string,
-  ): Promise<{ path: string; kind: BriefKind } | null> {
-    if (!DATE_DIR.test(date)) return null;
-    const dayDir = join(this.dir, date);
-    const scheduled = join(dayDir, `${prefix}${extension}`);
-    if (await exists(scheduled)) return { path: scheduled, kind: 'scheduled' };
-
-    const latest = (await this.manualSuffixes(dayDir)).at(-1);
-    return latest ? { path: join(dayDir, `${prefix}${latest}${extension}`), kind: 'manual' } : null;
-  }
-
-  /** Suffixes of the day's manual briefs, oldest first. */
-  private async manualSuffixes(dayDir: string): Promise<string[]> {
+  /** A day's briefs: scheduled ones by time (old brief.md first), then manual ones by time. */
+  private async briefFiles(dayDir: string): Promise<BriefFile[]> {
     let names: string[];
     try {
       names = await readdir(dayDir);
@@ -144,13 +188,19 @@ export class Archive {
       if (isNotFound(error)) return [];
       throw error;
     }
-    return names
-      .flatMap((name) => {
-        const match = MANUAL_BRIEF.exec(name);
-        return match ? [match[1]!] : [];
-      })
-      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
-      .map((time) => `-manual-${time}`);
+    const files = names.flatMap((name) => {
+      const match = BRIEF_FILE.exec(name);
+      if (!match) return [];
+      const [, kind, time, n] = match;
+      const file: BriefFile = kind
+        ? { suffix: `-${kind}-${time}${n ?? ''}`, kind: kind as BriefKind }
+        : { suffix: '', kind: 'scheduled' };
+      return [file];
+    });
+    const rank = (f: BriefFile) => (f.kind === 'scheduled' ? 0 : 1);
+    return files.sort(
+      (a, b) => rank(a) - rank(b) || a.suffix.localeCompare(b.suffix, 'en', { numeric: true }),
+    );
   }
 
   /**
@@ -188,8 +238,9 @@ export class Archive {
   }
 
   /**
-   * Links of news that briefs from the `days` days before `today` actually
-   * used, scheduled and manual alike. Unreadable files are skipped.
+   * Links of news that briefs actually used, scheduled and manual alike: those
+   * of `today` so far (a day can have several briefs) and of the `days` days
+   * before. Unreadable files are skipped.
    */
   async recentUsedNewsLinks(days: number, today: string): Promise<Set<string>> {
     const links = new Set<string>();
@@ -197,7 +248,7 @@ export class Archive {
     const from = DateTime.fromISO(today, { zone: 'utc' }).minus({ days }).toISODate()!;
 
     for (const date of await this.listDates()) {
-      if (date >= today || date < from) continue;
+      if (date > today || date < from) continue;
       for (const { raw } of await this.rawsOfDay(join(this.dir, date))) {
         const news = raw.news;
         if (!news) continue;

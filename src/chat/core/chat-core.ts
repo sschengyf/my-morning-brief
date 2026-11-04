@@ -6,6 +6,7 @@ import { getEffectiveLocation, type Location } from '../../location/index.js';
 import { formatNews, gatherText, type NumberedNews } from '../../sources/index.js';
 import type { ChatIO } from '../channel.js';
 import { historyCommand } from './commands/history.js';
+import { scheduleCommand } from './commands/schedule.js';
 import { cityCommand, homeCommand, whereCommand } from './commands/location.js';
 import { addCommand, doneCommand, todoCommand } from './commands/todo.js';
 import type { ChatDeps, Command, CommandContext } from './context.js';
@@ -28,6 +29,7 @@ export class ChatCore {
   private readonly ctx: CommandContext;
   private readonly commands: Record<string, Command>;
   private briefInFlight: Promise<unknown> | null = null;
+  private readonly handling = new Set<Promise<void>>();
 
   constructor(private readonly deps: ChatDeps) {
     this.logger = deps.logger ?? defaultLogger;
@@ -54,6 +56,7 @@ export class ChatCore {
       add: addCommand,
       done: doneCommand,
       history: historyCommand,
+      schedule: scheduleCommand,
       city: cityCommand,
       where: whereCommand,
       home: homeCommand,
@@ -83,7 +86,23 @@ export class ChatCore {
     return tracked;
   }
 
-  async handle(text: string, io: ChatIO): Promise<void> {
+  /** Whether a brief (scheduled or /brief) is being made right now. */
+  isBriefRunning(): boolean {
+    return this.briefInFlight !== null;
+  }
+
+  /** Resolves once the messages being handled now, and any brief, are done; for shutdown. */
+  async settle(): Promise<void> {
+    await Promise.allSettled([...this.handling, this.briefInFlight]);
+  }
+
+  handle(text: string, io: ChatIO): Promise<void> {
+    const work = this.handleNow(text, io);
+    this.handling.add(work);
+    return work.finally(() => this.handling.delete(work));
+  }
+
+  private async handleNow(text: string, io: ChatIO): Promise<void> {
     try {
       const command = parseCommand(text);
       if (!command) return await this.chat(text.trim(), io);

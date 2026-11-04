@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir } from '../../../test/helpers.js';
+import { makeTempDir, recordingLogger } from '../../../test/helpers.js';
 import { loadConfig } from './load.js';
 import { PROJECT_ROOT } from './paths.js';
 
@@ -110,6 +110,22 @@ describe('loadConfig', () => {
     await expect(loadConfig({ path, env: {} })).rejects.toThrow('telegram.bot_token 还是示例值');
     const config = await loadConfig({ path, env: {}, requireChannel: false });
     expect(config.ollama.model).toBe('qwen3');
+  });
+
+  it('warns about retired brief.time and catch_up_until instead of failing', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n[brief]\ntime = "08:00"\ncatch_up_until = "12:00"\n',
+    );
+    const logger = recordingLogger();
+    const config = await loadConfig({ path, env: {}, logger });
+    expect(config.brief.catch_up_hours).toBe(4);
+    expect(logger.warnings).toEqual([
+      expect.stringContaining('brief.time 已经不用了，定时请在聊天里用 /schedule 设置'),
+      expect.stringContaining('brief.catch_up_until 已经改为 brief.catch_up_hours'),
+    ]);
   });
 
   it('reports invalid TOML', async () => {

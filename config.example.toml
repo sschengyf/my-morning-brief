@@ -22,10 +22,10 @@ num_ctx = 16384         # Ollama 默认上下文很短，超长时会静默截�
 keep_alive = "30m"      # 早报后模型保留在内存里，方便接着聊天
 
 [brief]
-time = "08:00"             # 按当前生效时区的当地时间发送
+# 发送时间不在这里设置：在聊天里用 /schedule add 08:00 设置（可以设多个），存在 data/schedules.json
 weekend_news = true        # false 时周末早报不抓新闻，也不包含新闻小节
-catch_up_until = "12:00"   # 电脑睡过了发送时间，醒来后在这个时间之前仍补发；必须晚于 time，不支持跨午夜
-retry_minutes = [2, 5, 10] # 生成或发送失败后的重试间隔（仍受 catch_up_until 限制）
+catch_up_hours = 4         # 电脑睡过了某个定时，醒来后几小时内仍补发；不超过下一个定时，也不跨过午夜
+retry_minutes = [2, 5, 10] # 生成或发送失败后的重试间隔（仍在补发窗口内）
 # 以下是“家”的时区和位置。旅行时可以在聊天里用 /city 临时切换，/home 恢复为这里的设置
 timezone = "Pacific/Auckland"
 city = "Auckland"

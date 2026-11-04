@@ -1,6 +1,15 @@
 /** The menu both platforms register. `arg` names the optional/required argument. */
 export const COMMANDS = [
   { name: 'brief', description: '立即生成并发送早报' },
+  {
+    name: 'schedule',
+    description: '定时早报：查看、添加、删除',
+    arg: {
+      name: 'args',
+      description: '不填是查看；add 08:00 工作日 / remove 2 / clear',
+      required: false,
+    },
+  },
   { name: 'todo', description: '列出未完成的待办' },
   {
     name: 'add',
@@ -33,9 +42,13 @@ export const COMMANDS = [
   { name: 'help', description: '帮助' },
 ] as const;
 
-export const HELP_TEXT = `我是你的早报助手。每天早上把天气、日程、待办和新闻整理好发给你，有问题可以直接问我。
+export const HELP_TEXT = `我是你的早报助手。按你设的时间把天气、日程、待办和新闻整理好发给你，有问题可以直接问我。
 
 /brief 立即生成一份早报
+/schedule 看定时早报
+/schedule add 08:00 添加定时（可以加“工作日”或“周末”）
+/schedule remove 2 删除第 2 个定时
+/schedule clear 删除全部定时
 /todo 看待办
 /add 内容 添加待办
 /done 序号 完成待办

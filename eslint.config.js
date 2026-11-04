@@ -9,6 +9,7 @@ const SRC = resolve(import.meta.dirname, 'src');
 const LAYERS = [
   'infra',
   'location',
+  'schedules',
   'sources',
   'llm',
   'archive',

@@ -37,6 +37,13 @@ function entry(
       method: 'round_robin',
       ...newsRecord,
     },
+    ...(kind === 'scheduled' && {
+      schedule: {
+        id: `s${time.slice(0, 5)}`,
+        time: time.slice(0, 5),
+        label: `${time.slice(0, 5)} 每天`,
+      },
+    }),
   };
   return { date, raw, input: `prompt + data ${kind} ${time}`, brief: `早报 ${kind} ${time}` };
 }
@@ -46,18 +53,23 @@ async function archiveIn(): Promise<Archive> {
 }
 
 describe('Archive', () => {
-  it('writes a scheduled brief as raw.json, input.txt and brief.md with front matter', async () => {
+  it('writes a scheduled brief named by its schedule, with front matter', async () => {
     const archive = await archiveIn();
     const path = await archive.write(entry('2026-11-03', 'scheduled'));
 
     const dayDir = join(archive.dir, '2026-11-03');
-    expect(path).toBe(join(dayDir, 'brief.md'));
-    expect((await readdir(dayDir)).sort()).toEqual(['brief.md', 'input.txt', 'raw.json']);
+    expect(path).toBe(join(dayDir, 'brief-scheduled-0800.md'));
+    expect((await readdir(dayDir)).sort()).toEqual([
+      'brief-scheduled-0800.md',
+      'input-scheduled-0800.txt',
+      'raw-scheduled-0800.json',
+    ]);
     expect(await readFile(path, 'utf8')).toBe(
       [
         '---',
         'generated_at: 2026-11-03T08:00:00.000+13:00',
         'kind: scheduled',
+        'schedule: "08:00 每天"',
         'city: "Auckland"',
         'timezone: Pacific/Auckland',
         'model: "qwen3:32b"',
@@ -68,10 +80,58 @@ describe('Archive', () => {
         '',
       ].join('\n'),
     );
-    expect(await readFile(join(dayDir, 'input.txt'), 'utf8')).toBe(
+    expect(await readFile(join(dayDir, 'input-scheduled-0800.txt'), 'utf8')).toBe(
       'prompt + data scheduled 08:00:00',
     );
-    expect(JSON.parse(await readFile(join(dayDir, 'raw.json'), 'utf8')).model).toBe('qwen3:32b');
+    const raw = JSON.parse(await readFile(join(dayDir, 'raw-scheduled-0800.json'), 'utf8'));
+    expect(raw.schedule).toEqual({ id: 's08:00', time: '08:00', label: '08:00 每天' });
+  });
+
+  it('keeps several scheduled briefs a day, adding -2 when a name is taken', async () => {
+    const archive = await archiveIn();
+    await archive.write(entry('2026-11-03', 'scheduled', '18:00:00'));
+    await archive.write(entry('2026-11-03', 'scheduled', '08:00:00'));
+    await archive.write(entry('2026-11-03', 'scheduled', '08:00:00')); // re-added the same day
+    const names = await readdir(join(archive.dir, '2026-11-03'));
+    expect(names.filter((n) => n.startsWith('brief')).sort()).toEqual([
+      'brief-scheduled-0800-2.md',
+      'brief-scheduled-0800.md',
+      'brief-scheduled-1800.md',
+    ]);
+    // readBrief returns the day's first scheduled brief.
+    expect((await archive.readBrief('2026-11-03'))?.text).toBe('早报 scheduled 08:00:00');
+  });
+
+  it('lists all briefs of a day in the order they were made', async () => {
+    const archive = await archiveIn();
+    await archive.write(entry('2026-11-03', 'scheduled', '18:00:00'));
+    await archive.write(entry('2026-11-03', 'manual', '09:30:15'));
+    await archive.write(entry('2026-11-03', 'scheduled', '08:00:00'));
+    const briefs = await archive.briefsOfDay('2026-11-03');
+    expect(briefs.map((b) => [b.kind, b.schedule ?? null, b.generatedAt?.slice(11, 19)])).toEqual([
+      ['scheduled', '08:00 每天', '08:00:00'],
+      ['manual', null, '09:30:15'],
+      ['scheduled', '18:00 每天', '18:00:00'],
+    ]);
+    expect(await archive.briefsOfDay('2026-11-04')).toEqual([]);
+  });
+
+  it('still reads the plain brief.md of briefs archived before several schedules a day', async () => {
+    const archive = await archiveIn();
+    const dayDir = join(archive.dir, '2026-11-02');
+    await mkdir(dayDir, { recursive: true });
+    const old = entry('2026-11-02', 'manual', '08:00:00');
+    await writeFile(join(dayDir, 'raw.json'), JSON.stringify({ ...old.raw, kind: 'scheduled' }));
+    await writeFile(join(dayDir, 'brief.md'), '---\nkind: scheduled\n---\n\n旧的定时早报\n');
+    await archive.write(entry('2026-11-02', 'manual', '09:00:00'));
+    expect(await archive.readBrief('2026-11-02')).toMatchObject({
+      kind: 'scheduled',
+      text: '旧的定时早报',
+    });
+    expect((await archive.briefsOfDay('2026-11-02')).map((b) => b.text)).toEqual([
+      '旧的定时早报',
+      '早报 manual 09:00:00',
+    ]);
   });
 
   it('names manual briefs by time, never reusing a name within the same second', async () => {
@@ -198,10 +258,10 @@ describe('Archive', () => {
         usedIds: ['N1'],
       }),
     );
-    // Today's brief and briefs older than `days` do not count.
+    // Today's earlier briefs count too (a day can have several); briefs older than `days` do not.
     await archive.write(
       entry('2026-11-03', 'manual', '07:00:00', {
-        selected: [news('N1', 'https://today.test')],
+        selected: [news('N1', 'https://today.test'), news('N2', 'https://today-unused.test')],
         usedIds: ['N1'],
       }),
     );
@@ -213,9 +273,14 @@ describe('Archive', () => {
     );
     await mkdir(join(archive.dir, '2026-10-31'));
     await writeFile(join(archive.dir, '2026-10-31', 'raw.json'), '{ broken');
+    await writeFile(join(archive.dir, '2026-10-31', 'brief.md'), '坏的');
 
     const links = await archive.recentUsedNewsLinks(3, '2026-11-03');
-    expect([...links].sort()).toEqual(['https://a.test/2', 'https://b.test/1']);
+    expect([...links].sort()).toEqual([
+      'https://a.test/2',
+      'https://b.test/1',
+      'https://today.test',
+    ]);
     expect(logger.warnings).toEqual([expect.stringContaining('读取失败，已跳过')]);
     expect(await archive.recentUsedNewsLinks(0, '2026-11-03')).toEqual(new Set());
   });

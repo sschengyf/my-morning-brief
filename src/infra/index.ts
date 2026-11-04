@@ -13,4 +13,3 @@ export {
 export { LockError, acquireLock } from './lock.js';
 export { logger, redact, registerSecrets } from './logger.js';
 export type { Logger } from './logger.js';
-export { loadState } from './state.js';

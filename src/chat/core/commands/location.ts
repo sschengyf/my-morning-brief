@@ -6,8 +6,9 @@ import {
   type CityMatch,
   type Location,
 } from '../../../location/index.js';
-import type { Command, CommandContext } from '../context.js';
-import { formatTime, nextBriefTime, placeName } from '../display.js';
+import type { Command } from '../context.js';
+import { formatTime, placeName } from '../display.js';
+import { nextBriefLine } from '../next-brief.js';
 import { cityQueries } from '../parse.js';
 
 export const cityCommand: Command = async (args, io, ctx) => {
@@ -29,7 +30,7 @@ export const cityCommand: Command = async (args, io, ctx) => {
 
   const location: Location = { ...chosen, isHome: false };
   const lines = [
-    `已切换到 ${placeName(chosen)}，时区 ${chosen.timezone}。下次早报：${nextBriefText(ctx, location)}。`,
+    `已切换到 ${placeName(chosen)}，时区 ${chosen.timezone}。${await nextBriefLine(ctx, location)}`,
   ];
   const others = matches
     .slice(1)
@@ -54,7 +55,7 @@ export const whereCommand: Command = async (_args, io, ctx) => {
   await io.reply(
     [
       `当前位置：${place}，时区 ${location.timezone}，当地时间 ${formatTime(local)}。`,
-      `下次早报：${nextBriefText(ctx, location)}。`,
+      await nextBriefLine(ctx, location),
       ...(location.isHome ? [] : ['回家后用 /home 恢复。']),
     ].join('\n'),
   );
@@ -64,15 +65,5 @@ export const homeCommand: Command = async (_args, io, ctx) => {
   await clearLocationOverride(ctx.deps.config);
   ctx.invalidateData();
   const home = homeLocation(ctx.deps.config);
-  await io.reply(
-    `已恢复为 ${home.city}，时区 ${home.timezone}。下次早报：${nextBriefText(ctx, home)}。`,
-  );
+  await io.reply(`已恢复为 ${home.city}，时区 ${home.timezone}。${await nextBriefLine(ctx, home)}`);
 };
-
-/** "当地时间 11月3日 08:00（Auckland 时间 11月3日 13:00）" */
-function nextBriefText(ctx: CommandContext, location: Location): string {
-  const next = nextBriefTime(ctx.now(), location.timezone, ctx.deps.config.brief.time);
-  const home = homeLocation(ctx.deps.config);
-  if (location.timezone === home.timezone) return `当地时间 ${formatTime(next)}`;
-  return `当地时间 ${formatTime(next)}（${home.city} 时间 ${formatTime(next.setZone(home.timezone))}）`;
-}

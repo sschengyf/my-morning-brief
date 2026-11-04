@@ -11,7 +11,7 @@ import {
   stopChannels,
 } from './setup.js';
 
-/** brief:once — sends one brief to every ready channel and exits; lastBriefDate is untouched. */
+/** brief:once — sends one brief to every ready channel and exits; it counts for no schedule. */
 export async function once(): Promise<void> {
   const config = await loadConfig();
   await prepare(config);

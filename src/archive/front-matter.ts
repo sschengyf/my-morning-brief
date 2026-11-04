@@ -6,6 +6,7 @@ export function frontMatter(raw: ArchiveRaw): string {
     '---',
     `generated_at: ${raw.generatedAt}`,
     `kind: ${raw.kind}`,
+    ...(raw.schedule ? [`schedule: ${JSON.stringify(raw.schedule.label)}`] : []),
     `city: ${JSON.stringify(raw.location.city)}`,
     `timezone: ${raw.location.timezone}`,
     `model: ${JSON.stringify(raw.model)}`,

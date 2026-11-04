@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import type { Archive, ArchiveRaw, BriefKind, NewsRecord } from '../archive/index.js';
+import type { Archive, ArchiveRaw, BriefKind, NewsRecord, ScheduleRef } from '../archive/index.js';
 import { type Config, logger as defaultLogger, type Logger } from '../infra/index.js';
 import { BRIEF_PROMPT, type BriefData, type LlmService } from '../llm/index.js';
 import { getEffectiveLocation, type Location } from '../location/index.js';
@@ -31,6 +31,8 @@ export interface RunBriefOptions {
   archive: boolean;
   /** Skip the model and send the raw data; the scheduler's last resort. */
   fallback?: boolean;
+  /** The schedule a scheduled brief is for; names its archive files. */
+  schedule?: ScheduleRef;
 }
 
 export type BriefStatus = 'sent' | 'llm_failed' | 'send_failed';
@@ -166,6 +168,7 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
         todos: { ok: todos.ok, text: todos.text, data: todos.raw },
       },
       news: newsRecord,
+      ...(options.schedule && { schedule: options.schedule }),
     };
     try {
       const path = await archive.write({ date, raw, input: modelInput, brief: text });

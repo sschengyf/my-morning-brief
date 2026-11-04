@@ -44,9 +44,9 @@ my-morning-brief/
 │   │   ├── config/             #   schema.ts（zod 校验）、load.ts（读文件、环境变量覆盖）、parse.ts、paths.ts、secrets.ts
 │   │   ├── logger.ts           #   带时间戳的日志，统一脱敏 token 和日历链接
 │   │   ├── fs.ts               #   writeFileAtomic、data_dir 初始化、临时文件清理
-│   │   ├── lock.ts             #   单实例锁 app.lock
-│   │   └── state.ts            #   state.json 读写
+│   │   └── lock.ts             #   单实例锁 app.lock
 │   ├── location/               # effective.ts（当前生效的时区和位置，location.json 覆盖 config）、geocoding.ts（城市查询）
+│   ├── schedules/              # 定时本身：store.ts（data/schedules.json）、rules.ts（解析、校验冲突）、windows.ts（发送窗口、dueSchedule、下一次）
 │   ├── sources/                # 数据源
 │   │   ├── weather/            #   fetch.ts（Open-Meteo）、codes.ts（天气代码、紫外线等级）、format.ts、types.ts
 │   │   ├── calendar/           #   fetch.ts、expand.ts（展开重复日程、时区修正）、format.ts、types.ts
@@ -74,7 +74,7 @@ my-morning-brief/
 │   │   │                       #   conversation.ts（当天早报和对话记忆）、day-data.ts（数据缓存）、menu.ts、parse.ts、display.ts、links.ts
 │   │   ├── telegram/           #   adapter.ts（grammY）、send.ts、format.ts（Markdown → Telegram HTML）
 │   │   └── discord/            #   adapter.ts（discord.js，只处理私信）、slash-commands.ts、format.ts
-│   └── scheduler/              # 阶段 6：每日定时 + 补发逻辑
+│   └── scheduler/              # 按时运行：scheduler.ts（轮询、重试、降级、重发）、state.ts（state.json）、prompt.ts（首次设置提醒）、keep-awake.ts（caffeinate）
 ├── test/                       # 测试共用的 helpers.ts 和 fixtures/（示例 .ics、RSS、天气和城市查询 JSON）；测试本身在 src/ 里
 ├── config.example.toml
 ├── data/                       # 程序产生的数据（paths.data_dir 的默认值），不提交 git
@@ -88,7 +88,7 @@ my-morning-brief/
 **模块规则**（`eslint.config.js` 里的 `local/module-boundaries` 自动检查）：
 
 - `src/` 下每个顶层目录是一个模块。别的模块只能通过它的 `index.ts` 引用它，不能直接引用它内部的文件；`index.ts` 只导出别的模块真正用到的东西。模块内部的文件互相直接引用。
-- 依赖只能指向更底层的模块：`infra → location → sources → llm → archive → brief → chat → scheduler → app`（左边最底层）。比如 `llm` 不能引用 `brief`，`sources` 不能引用 `llm`。新加模块时要把它放进这个顺序。
+- 依赖只能指向更底层的模块：`infra → location → schedules → sources → llm → archive → brief → chat → scheduler → app`（左边最底层）。比如 `llm` 不能引用 `brief`，`sources` 不能引用 `llm`。新加模块时要把它放进这个顺序。
 - 文件和目录名用小写短横线（kebab-case），例如 `select-news.ts`、`chat-core.ts`。
 - 单元测试放在被测文件旁边，一个源文件对应一个测试文件，例如 `src/llm/sanitize.ts` 和 `src/llm/sanitize.test.ts`。测试可以直接引用别的模块内部的文件，方便单独测一个函数（模块边界规则对 `*.test.ts` 放宽这一条，依赖方向照样检查）。
 
@@ -174,7 +174,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 - 初始化项目：`git init`、package.json、tsconfig（strict、ESM、NodeNext）、eslint、prettier、vitest、.gitignore。
 - `infra/config/`：用 zod 定义 schema，提供默认值，校验失败时打印中文错误（比如“缺少 telegram.bot_token”）。`config.toml` 不存在时提示“请先复制 config.example.toml 为 config.toml”。还要校验时区是 luxon 能识别的有效 IANA 时区。（发送时间 `brief.time` 和 `catch_up_until` 在阶段 6 去掉了，定时改为在聊天里设置。）环境变量覆盖和 `MORNING_BRIEF_CONFIG` 也在这里实现（见第 6 节“可移植性”）。
 - `infra/logger.ts`：带时间戳，分 info、warn、error 三级，只写 stdout/stderr。所有输出（包括错误对象的 message 和 stack）都要经过脱敏：把 Telegram 和 Discord 的 bot token、每个 ics 链接和 `healthcheck_url` 替换成 `***`。grammY 的网络错误里会带 `https://api.telegram.org/bot<token>/...`，所以不能只靠“注意别打印”。
-- `infra/fs.ts`、`infra/state.ts`：按第 6 节“数据持久化”实现原子写入、`data_dir` 初始化、启动时清理残留临时文件、`state.json` 读写和损坏恢复。
+- `infra/fs.ts`、`infra/state.ts`（阶段 6 挪到 `scheduler/state.ts`）：按第 6 节“数据持久化”实现原子写入、`data_dir` 初始化、启动时清理残留临时文件、`state.json` 读写和损坏恢复。
 - `location/`：按第 6 节“位置和时区”实现 `getEffectiveLocation()`、`setLocationOverride()`、`clearLocationOverride()` 和 `searchCity(name, country?)`。后面所有需要时区或天气位置的地方都通过 `getEffectiveLocation()` 获取，不直接读 `config.brief.timezone`。
 
 **验收**：`pnpm typecheck`、`pnpm lint`、`pnpm test` 都通过；配置校验有测试，覆盖正常配置、缺字段、类型错误、环境变量覆盖。logger 脱敏有测试，覆盖包含 token 的错误 stack。`writeFileAtomic` 有测试，覆盖正常写入、写入中途抛错时原文件不变且临时文件被清理。`state.json` 损坏时能正常启动并保留损坏文件。`location/` 有测试，覆盖没有覆盖文件时用 config、有覆盖时用覆盖、清除后恢复、覆盖文件损坏时退回 config 并记 warn；`searchCity` 用 fixture 测试，覆盖英文城市名、按国家过滤、国家字段为空（如 Hong Kong）、没有结果。
@@ -363,7 +363,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 #### 阶段 6：定时、补发和聊天设置定时
 
-`scheduler/`。一天可以有多个定时，每个定时都发**完整早报**；定时**只在聊天里设置**，`config.toml` 里没有发送时间（2026-11-04 和用户确认）。
+定时的存储和计算在 `schedules/`（`/schedule` 命令在 `chat/` 里，而 `chat` 不能依赖更上层的 `scheduler`），按时运行在 `scheduler/`。一天可以有多个定时，每个定时都发**完整早报**；定时**只在聊天里设置**，`config.toml` 里没有发送时间（2026-11-04 和用户确认）。
 
 **定时的存储**
 
@@ -427,6 +427,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - 模型失败但数据抓到了：重试用完后发送降级早报（`formatFallbackBrief`），记为已发送；
   - 早报已经生成、只是发送失败：把生成好的早报存进 `state.json` 的 `pendingBrief`（带日期、定时 id 和**失败的渠道**），重试时**只重发给这些渠道，不重新抓数据和调用模型**，已经收到的渠道不会重复收到；重试用完后只记日志（发不出去也就没法提醒），记为已发送；
   - 窗口结束还没成功：停止重试，记一条 error 日志。
+  - 模型失败、而下一次重试已经排到窗口结束之后时，不再等，**马上发降级早报**（实现时补充：否则 Mac 在窗口快结束时才醒、Ollama 还没就绪，那天就什么都收不到）。
   - 发送成功或放弃后清掉 `pendingBrief`；`pendingBrief` 的日期不是今天，或者对应的定时已经被删除，直接丢弃。
 - 旧格式的 `state.json`（单个 `lastBriefDate`）直接丢弃那几个字段，不报错：设好定时之前本来就不会自动发早报。
 

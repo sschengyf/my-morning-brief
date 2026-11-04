@@ -21,8 +21,7 @@ describe('parseConfig', () => {
   it('fills defaults for everything except the token and model', () => {
     const config = parseConfig(minimalRawConfig());
     expect(config.brief).toMatchObject({
-      time: '08:00',
-      catch_up_until: '12:00',
+      catch_up_hours: 4,
       timezone: 'Pacific/Auckland',
       city: 'Auckland',
       retry_minutes: [2, 5, 10],
@@ -108,18 +107,20 @@ describe('parseConfig', () => {
     );
   });
 
-  it('requires catch_up_until to be later than time', () => {
+  it('limits catch_up_hours to more than 0 and at most 12', () => {
     const raw = minimalRawConfig();
-    raw.brief = { time: '08:00', catch_up_until: '07:30' };
-    expectConfigError(raw, 'brief.catch_up_until 必须晚于 brief.time');
-    raw.brief = { time: '08:00', catch_up_until: '08:00' };
-    expectConfigError(raw, 'brief.catch_up_until 必须晚于 brief.time');
+    raw.brief = { catch_up_hours: 0 };
+    expectConfigError(raw, 'brief.catch_up_hours 超出允许范围');
+    raw.brief = { catch_up_hours: 13 };
+    expectConfigError(raw, 'brief.catch_up_hours 超出允许范围');
+    raw.brief = { catch_up_hours: 1.5 };
+    expect(parseConfig(raw).brief.catch_up_hours).toBe(1.5);
   });
 
-  it('validates time format and timezone', () => {
+  it('validates the timezone', () => {
     const raw = minimalRawConfig();
-    raw.brief = { time: '8am', timezone: 'Auckland' };
-    expectConfigError(raw, 'brief.time 格式应为 HH:MM', 'brief.timezone 不是有效的 IANA 时区');
+    raw.brief = { timezone: 'Auckland' };
+    expectConfigError(raw, 'brief.timezone 不是有效的 IANA 时区');
   });
 
   it('resolves data_dir against the project root and other paths against data_dir', () => {

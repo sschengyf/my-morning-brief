@@ -40,6 +40,16 @@ export interface ArchiveRaw {
   };
   /** Null when news was skipped (weekend with weekend_news = false). */
   news: NewsRecord | null;
+  /** The schedule a scheduled brief was sent for; absent for manual briefs. */
+  schedule?: ScheduleRef;
+}
+
+export interface ScheduleRef {
+  id: string;
+  /** "HH:MM" */
+  time: string;
+  /** "08:00 每天" */
+  label: string;
 }
 
 export interface ArchiveEntry {
@@ -58,6 +68,10 @@ export interface StoredBrief {
   /** The brief without its front matter. */
   text: string;
   file: string;
+  /** From raw.json; absent when it is unreadable. */
+  generatedAt?: string;
+  /** "08:00 每天" for a scheduled brief. */
+  schedule?: string;
 }
 
 export type SelectionMethod = 'round_robin';

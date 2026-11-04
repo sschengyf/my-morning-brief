@@ -50,7 +50,8 @@ function splitLine(line: string, limit: number, measure: (chunk: string) => numb
   const pieces: string[] = [];
   let rest = line;
   while (measure(rest) > limit) {
-    // Longest prefix that fits, by binary search: `measure` may convert the whole text.
+    // A long prefix that fits, by binary search: `measure` may convert the whole
+    // text. `fits` is only ever set to a prefix that was measured to fit.
     let fits = 1;
     let tooLong = rest.length;
     while (tooLong - fits > 1) {
@@ -58,9 +59,12 @@ function splitLine(line: string, limit: number, measure: (chunk: string) => numb
       if (measure(rest.slice(0, middle)) <= limit) fits = middle;
       else tooLong = middle;
     }
-    const end = fits;
-    pieces.push(rest.slice(0, breakPoint(rest, end)));
-    rest = rest.slice(pieces.at(-1)!.length);
+    // A nicer cut is earlier, but after conversion an earlier prefix is not
+    // always shorter (an unclosed ** or link stays as text); keep `fits` then.
+    const cut = breakPoint(rest, fits);
+    const end = measure(rest.slice(0, cut)) <= limit ? cut : fits;
+    pieces.push(rest.slice(0, end));
+    rest = rest.slice(end);
   }
   if (rest) pieces.push(rest);
   return pieces;

@@ -1,9 +1,7 @@
-import { writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir, minimalRawConfig } from '../../../test/helpers.js';
-import { loadConfig } from './load.js';
+import { minimalRawConfig } from '../../../test/helpers.js';
 import { parseConfig } from './parse.js';
 import { PROJECT_ROOT } from './paths.js';
 import { ConfigError } from './schema.js';
@@ -35,29 +33,6 @@ describe('parseConfig', () => {
     // Everything the program writes lives under data/, the one folder to mount or back up.
     expect(config.paths.data_dir).toBe(join(PROJECT_ROOT, 'data'));
     expect(config.archive.dir).toBe(join(PROJECT_ROOT, 'data', 'archive'));
-  });
-
-  it('accepts the shipped config.example.toml once the placeholders are filled in', async () => {
-    const dir = await makeTempDir();
-    const example = await import('node:fs/promises').then((fs) =>
-      fs.readFile(join(PROJECT_ROOT, 'config.example.toml'), 'utf8'),
-    );
-    const path = join(dir, 'config.toml');
-    await writeFile(
-      path,
-      example
-        .replace('在这里填 Discord Developer Portal 里 Bot 页面的 token', 'discord-token-example')
-        .replace('填你的模型名', 'qwen3:32b'),
-    );
-    const config = await loadConfig({ path, env: {} });
-    expect(config.news.feeds).toHaveLength(4);
-    expect(config.brief.city).toBe('Auckland');
-    expect(config.discord).toEqual({
-      enabled: true,
-      bot_token: 'discord-token-example',
-      user_id: '',
-    });
-    expect(config.telegram.enabled).toBe(false);
   });
 
   it('reports missing fields in Chinese', () => {

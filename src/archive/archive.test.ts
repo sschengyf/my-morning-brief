@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { makeTempDir, recordingLogger } from '../../test/helpers.js';
@@ -125,6 +125,32 @@ describe('Archive', () => {
     const latest = await archive.latestBrief('2026-11-03');
     expect(latest?.text).toBe('早报 manual 10:00:00');
     expect(latest?.raw.kind).toBe('manual');
+  });
+
+  it('skips a brief whose write was cut short, falling back to the one before', async () => {
+    const archive = await archiveIn();
+    await archive.write(entry('2026-11-03', 'scheduled', '08:00:00'));
+    await archive.write(entry('2026-11-03', 'manual', '09:30:15'));
+    // Killed between raw.json and brief.md.
+    await rm(join(archive.dir, '2026-11-03', 'brief-manual-093015.md'));
+    expect((await archive.latestBrief('2026-11-03'))?.text).toBe('早报 scheduled 08:00:00');
+  });
+
+  it('parses each raw.json once until it changes, and warns about a broken one once', async () => {
+    const logger = recordingLogger();
+    const archive = new Archive(join(await makeTempDir(), 'archive'), logger);
+    await archive.write(entry('2026-11-03', 'scheduled', '08:00:00'));
+    const dayDir = join(archive.dir, '2026-11-03');
+    await writeFile(join(dayDir, 'raw-manual-093015.json'), '{ broken');
+    await writeFile(join(dayDir, 'brief-manual-093015.md'), '坏的');
+    for (let i = 0; i < 3; i++) await archive.latestBrief('2026-11-03');
+    expect(logger.warnings).toHaveLength(1);
+
+    // A rewritten file is read again.
+    const fixed = entry('2026-11-03', 'manual', '09:30:15');
+    await writeFile(join(dayDir, 'raw-manual-093015.json'), JSON.stringify(fixed.raw));
+    await writeFile(join(dayDir, 'brief-manual-093015.md'), '修好的');
+    expect((await archive.latestBrief('2026-11-03'))?.text).toBe('修好的');
   });
 
   it('returns null for dates without a brief, or that are not dates', async () => {

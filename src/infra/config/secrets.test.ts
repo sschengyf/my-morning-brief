@@ -3,7 +3,7 @@ import { minimalRawConfig } from '../../../test/helpers.js';
 import { parseConfig } from './parse.js';
 import { secretsOf } from './secrets.js';
 
-describe('parseConfig', () => {
+describe('secretsOf', () => {
   it('lists the tokens, Discord user id, calendar links and healthcheck url as secrets', () => {
     const config = parseConfig({
       ...minimalRawConfig(),

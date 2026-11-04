@@ -11,6 +11,8 @@ import { frontMatter, stripFrontMatter } from './front-matter.js';
 import type { ArchiveEntry, ArchiveRaw, BriefKind, StoredBrief } from './types.js';
 
 const DATE_DIR = /^\d{4}-\d{2}-\d{2}$/;
+/** Parsed raw.json files kept in memory; chat checks today's on every question. */
+const RAW_CACHE_SIZE = 50;
 const MANUAL_BRIEF = /^brief-manual-(\d{6}(?:-\d+)?)\.md$/;
 
 /**
@@ -19,6 +21,11 @@ const MANUAL_BRIEF = /^brief-manual-(\d{6}(?:-\d+)?)\.md$/;
  * so they never pass for the scheduled one or overwrite each other.
  */
 export class Archive {
+  private readonly rawCache = new Map<
+    string,
+    { ino: number; mtimeMs: number; size: number; raw: ArchiveRaw | null }
+  >();
+
   constructor(
     readonly dir: string,
     private readonly logger: Logger = defaultLogger,
@@ -87,23 +94,31 @@ export class Archive {
   async latestBrief(date: string): Promise<{ text: string; raw: ArchiveRaw } | null> {
     if (!DATE_DIR.test(date)) return null;
     const dayDir = join(this.dir, date);
-    let latest: { suffix: string; raw: ArchiveRaw; at: number } | null = null;
+    const newestFirst = (await this.rawsOfDay(dayDir)).sort(
+      (a, b) =>
+        DateTime.fromISO(b.raw.generatedAt).toMillis() -
+        DateTime.fromISO(a.raw.generatedAt).toMillis(),
+    );
+    for (const { suffix, raw } of newestFirst) {
+      try {
+        const text = await readFile(join(dayDir, `brief${suffix}.md`), 'utf8');
+        return { text: stripFrontMatter(text).trim(), raw };
+      } catch (error) {
+        // raw.json is written first: a write cut short leaves it without its brief.
+        if (!isNotFound(error)) throw error;
+      }
+    }
+    return null;
+  }
+
+  /** The readable raw.json files of a day folder: the scheduled one, then manual ones oldest first. */
+  private async rawsOfDay(dayDir: string): Promise<{ suffix: string; raw: ArchiveRaw }[]> {
+    const found: { suffix: string; raw: ArchiveRaw }[] = [];
     for (const suffix of ['', ...(await this.manualSuffixes(dayDir))]) {
-      const path = join(dayDir, `raw${suffix}.json`);
-      if (!(await exists(path))) continue;
-      const raw = await this.parseRaw(path);
-      if (!raw) continue;
-      const at = DateTime.fromISO(raw.generatedAt).toMillis();
-      if (!latest || at > latest.at) latest = { suffix, raw, at };
+      const raw = await this.parseRaw(join(dayDir, `raw${suffix}.json`));
+      if (raw) found.push({ suffix, raw });
     }
-    if (!latest) return null;
-    try {
-      const text = await readFile(join(dayDir, `brief${latest.suffix}.md`), 'utf8');
-      return { text: stripFrontMatter(text).trim(), raw: latest.raw };
-    } catch (error) {
-      if (isNotFound(error)) return null;
-      throw error;
-    }
+    return found;
   }
 
   private async findFile(
@@ -138,15 +153,38 @@ export class Archive {
       .map((time) => `-manual-${time}`);
   }
 
+  /**
+   * A raw.json, or null when it is missing or unreadable (with one warning).
+   * Parsed files are cached by inode, size and mtime, so rereading today's archive
+   * for every chat question costs a stat per file.
+   */
   private async parseRaw(path: string): Promise<ArchiveRaw | null> {
+    let info;
     try {
-      const raw = JSON.parse(await readFile(path, 'utf8')) as ArchiveRaw;
-      if (raw?.version !== 1) throw new Error('不认识的格式');
-      return raw;
+      info = await stat(path);
     } catch (error) {
-      this.logger.warn(`归档文件 ${path} 读取失败，已跳过`, error);
-      return null;
+      if (isNotFound(error)) return null;
+      throw error;
     }
+    const cached = this.rawCache.get(path);
+    const unchanged =
+      cached?.ino === info.ino && cached.mtimeMs === info.mtimeMs && cached.size === info.size;
+    if (cached && unchanged) return cached.raw;
+
+    let raw: ArchiveRaw | null;
+    try {
+      raw = JSON.parse(await readFile(path, 'utf8')) as ArchiveRaw;
+      if (raw?.version !== 1) throw new Error('不认识的格式');
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      this.logger.warn(`归档文件 ${path} 读取失败，已跳过`, error);
+      raw = null;
+    }
+    this.rawCache.delete(path);
+    this.rawCache.set(path, { ino: info.ino, mtimeMs: info.mtimeMs, size: info.size, raw });
+    if (this.rawCache.size > RAW_CACHE_SIZE)
+      this.rawCache.delete(this.rawCache.keys().next().value!);
+    return raw;
   }
 
   /**
@@ -160,13 +198,8 @@ export class Archive {
 
     for (const date of await this.listDates()) {
       if (date >= today || date < from) continue;
-      const dayDir = join(this.dir, date);
-      const suffixes = ['', ...(await this.manualSuffixes(dayDir))];
-      for (const suffix of suffixes) {
-        const path = join(dayDir, `raw${suffix}.json`);
-        if (!(await exists(path))) continue;
-        const raw = await this.parseRaw(path);
-        const news = raw?.news;
+      for (const { raw } of await this.rawsOfDay(join(this.dir, date))) {
+        const news = raw.news;
         if (!news) continue;
         const used = new Set(news.usedIds);
         for (const item of news.selected) if (used.has(item.id)) links.add(item.link);

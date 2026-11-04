@@ -21,4 +21,15 @@ describe('splitting', () => {
     expect(chunks.some((chunk) => chunk.includes(LINK))).toBe(true);
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(100);
   });
+
+  it('keeps every piece within the limit even when an earlier cut measures longer', () => {
+    // A measure that is not monotonic, like Telegram HTML length: here a piece
+    // ending in a comma (the nicer cut) counts as too long.
+    const measure = (chunk: string) => (chunk.endsWith('，') ? 1000 : chunk.length);
+    const line = Array.from({ length: 40 }, (_, i) => `词语${i}`).join('，');
+    const chunks = splitMessage(line, 50, measure);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) expect(measure(chunk)).toBeLessThanOrEqual(50);
+    expect(chunks.join('')).toBe(line);
+  });
 });

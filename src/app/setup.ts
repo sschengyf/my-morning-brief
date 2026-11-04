@@ -18,6 +18,14 @@ import { LlmService, OllamaClient } from '../llm/index.js';
 export async function prepare(config: Config): Promise<void> {
   registerSecrets(secretsOf(config));
   await ensureDataDir(config.paths.data_dir);
+}
+
+/**
+ * Removes temp files left by interrupted writes. Only the lock holder may do
+ * this: in any other process (brief:once, brief:dry, a second start) the temp
+ * files may belong to the running instance's writes in progress.
+ */
+export async function cleanupLeftovers(config: Config): Promise<void> {
   const removed = await cleanupTempFiles(config.paths.data_dir);
   if (removed.length > 0) logger.info(`清理了 ${removed.length} 个上次中断写入留下的临时文件`);
 }

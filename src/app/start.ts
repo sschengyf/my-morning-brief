@@ -3,12 +3,20 @@ import { type Channel, ChatCore } from '../chat/index.js';
 import { acquireLock, type Config, loadConfig, loadState, logger } from '../infra/index.js';
 import { LlmError, LlmService, OllamaClient } from '../llm/index.js';
 import { getEffectiveLocation } from '../location/index.js';
-import { createChannels, NO_OWNER_HINT, prepare, startChannels, stopChannels } from './setup.js';
+import {
+  cleanupLeftovers,
+  createChannels,
+  NO_OWNER_HINT,
+  prepare,
+  startChannels,
+  stopChannels,
+} from './setup.js';
 
 export async function start(): Promise<void> {
   const config = await loadConfig();
   await prepare(config);
   const releaseLock = await acquireLock(config.paths.data_dir);
+  await cleanupLeftovers(config);
   const channels = createChannels(config);
   // Registered before anything that can hang (a Discord login that never gets
   // ready), so Ctrl-C always disconnects and releases the lock.

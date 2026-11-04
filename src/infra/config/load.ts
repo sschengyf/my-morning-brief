@@ -75,5 +75,8 @@ function applyEnvOverrides(raw: Record<string, unknown>, env: NodeJS.ProcessEnv)
   const discord = { ...(raw.discord as Record<string, unknown> | undefined) };
   if (env.DISCORD_BOT_TOKEN) discord.bot_token = env.DISCORD_BOT_TOKEN;
   if (env.DISCORD_USER_ID) discord.user_id = env.DISCORD_USER_ID;
-  return { ...raw, telegram, discord };
+  // Not OLLAMA_HOST: Ollama's own variable is often a bare "0.0.0.0" meant for the server.
+  const ollama = { ...(raw.ollama as Record<string, unknown> | undefined) };
+  if (env.MORNING_BRIEF_OLLAMA_HOST) ollama.host = env.MORNING_BRIEF_OLLAMA_HOST;
+  return { ...raw, telegram, discord, ollama };
 }

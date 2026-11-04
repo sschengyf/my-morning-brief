@@ -38,7 +38,7 @@ export class TelegramChannel implements Channel {
       this.polling = this.bot.start({ onStart: () => resolve() }).catch((error: unknown) => {
         if (error instanceof GrammyError && error.error_code === 409) {
           this.logger.error(
-            'Telegram 返回 409：另一个实例正在用这个 bot 运行（可能是开机自启的那个），请先停掉其中一个',
+            'Telegram 返回 409：另一个实例正在用这个 bot 运行（可能是 Docker 里的那个），请先停掉其中一个',
           );
         } else {
           this.logger.error('Telegram 轮询停止了', error);

@@ -1,6 +1,6 @@
 # 代码流程
 
-这份文档说明程序启动后做了什么、一份早报怎么生成、聊天消息怎么处理、定时怎么触发。对应的是阶段 6 完成时的代码（提交 `c4f1a87`），阶段 7 的 Docker 部署还没有写进来。
+这份文档说明程序启动后做了什么、一份早报怎么生成、聊天消息怎么处理、定时怎么触发。在 Docker 里运行时流程完全一样，只是由 Docker 启动、崩溃后由 Docker 重启（见 README 第 5 节）。
 
 图用 Mermaid 写，GitHub 和 VS Code（装 Markdown Preview Mermaid Support 插件）都能直接显示。
 

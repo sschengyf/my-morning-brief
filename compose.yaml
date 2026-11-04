@@ -1,0 +1,22 @@
+# One person's bot. For a second person, copy the service with its own name,
+# hostname, config file and data folder (README: 多人使用).
+services:
+  morning-brief:
+    build: .
+    image: morning-brief
+    # Fixed so a restarted or rebuilt container recognises its own app.lock.
+    hostname: morning-brief
+    restart: unless-stopped
+    environment:
+      # Ollama runs on the Mac itself (Docker Desktop has no Metal GPU).
+      MORNING_BRIEF_OLLAMA_HOST: http://host.docker.internal:11434
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - ./data:/app/data
+    # The program waits up to 30 s for a brief in progress; Docker's default is 10 s.
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'

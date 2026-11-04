@@ -6,9 +6,9 @@
 |---|---|
 | `todo.md` | 待办，`/add`、`/done` 改的就是它 |
 | `archive/日期/` | 每天的早报、给模型的输入和原始数据 |
+| `schedules.json` | 用 `/schedule` 设置的定时 |
 | `state.json` | 定时早报的状态（今天发过没有、重试） |
 | `location.json` | 用 `/city` 切换城市后的临时位置，`/home` 后删除 |
 | `app.lock` | 运行中的程序的锁，正常退出时删除 |
-| `logs/` | 开机自启后的日志 |
 
-迁移或备份时复制整个目录即可；里面有日程和待办等私人数据，备份要加密。Docker 部署时把数据卷挂到这个目录。
+迁移或备份时复制整个目录即可；里面有日程和待办等私人数据，备份要加密。Docker 部署时 `compose.yaml` 把这个目录挂进容器（`/app/data`）；日志不在这里，用 `docker compose logs` 看。

@@ -1,0 +1,16 @@
+# Only package files, tsconfig.json and src/ go into the image; personal data never does.
+**/node_modules
+/data
+/config.toml
+/archive
+/state.json
+/location.json
+/todo.md
+/app.lock
+/logs
+**/*.test.ts
+/test
+/docs
+/.git
+/.vscode
+**/.DS_Store

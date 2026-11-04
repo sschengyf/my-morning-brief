@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { link, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
-import { uptime } from 'node:os';
+import { hostname, uptime } from 'node:os';
 import { join } from 'node:path';
 import { isNotFound } from './fs.js';
 
@@ -56,11 +56,14 @@ function isAlive(pid: number): boolean {
 export interface LockOptions {
   pid?: number;
   boot?: Boot;
+  host?: string;
 }
 
 interface Owner {
   pid: number | null;
   boot: Boot;
+  /** Missing in locks from before it was recorded: taken as this host. */
+  host?: string;
   /** Identifies this lock file, so a takeover never removes a newer one. */
   ino: number;
 }
@@ -75,6 +78,12 @@ interface Owner {
  * reads it half-written. It is stale when its process has died, or when it is
  * from an earlier boot: after a power cut its pid may belong to some
  * unrelated process by now.
+ *
+ * It also holds the host name. A container and the Mac can share data/, and
+ * neither can see the other's processes, so a lock from another host is never
+ * taken over; the user removes it. A container's program is always pid 1 under
+ * the host name set in compose.yaml, so a container's own leftover lock is
+ * still taken over (same pid as ours).
  */
 export async function acquireLock(
   dataDir: string,
@@ -82,10 +91,11 @@ export async function acquireLock(
 ): Promise<() => Promise<void>> {
   const pid = options.pid ?? process.pid;
   const boot = options.boot ?? (await currentBoot());
+  const host = options.host ?? hostname();
   const path = join(dataDir, LOCK_FILE);
   const suffix = randomBytes(6).toString('hex');
   const temp = join(dataDir, `.${LOCK_FILE}.${suffix}.tmp`);
-  const content = JSON.stringify({ pid, boot });
+  const content = JSON.stringify({ pid, boot, host });
 
   try {
     for (let attempt = 1; ; attempt++) {
@@ -103,15 +113,18 @@ export async function acquireLock(
       }
       const owner = await readOwner(path);
       if (!owner) continue; // released in between
+      if (owner.host !== undefined && owner.host !== host) {
+        throw new LockError(
+          `${path} 属于另一台机器或容器（${owner.host}）上的实例。它在运行就先停掉它（docker compose down，或在那边按 Ctrl-C）；确认已经停了，再删掉这个文件`,
+        );
+      }
       if (
         owner.pid !== null &&
         owner.pid !== pid &&
         isAlive(owner.pid) &&
         sameBoot(owner.boot, boot)
       ) {
-        throw new LockError(
-          `另一个实例正在运行（进程 ${owner.pid}，可能是开机自启的那个），请先停掉其中一个`,
-        );
+        throw new LockError(`另一个实例正在运行（进程 ${owner.pid}），请先停掉其中一个`);
       }
       await removeStale(path, owner.ino, join(dataDir, `.${LOCK_FILE}.${suffix}.stale`));
     }
@@ -166,6 +179,11 @@ async function readOwner(path: string): Promise<Owner | null> {
   }
   // A lock from before the boot was recorded holds just the pid.
   if (typeof parsed === 'number') return { pid: validPid(parsed), boot: {}, ino };
-  const record = (parsed ?? {}) as { pid?: unknown; boot?: Boot };
-  return { pid: validPid(record.pid), boot: record.boot ?? {}, ino };
+  const record = (parsed ?? {}) as { pid?: unknown; boot?: Boot; host?: unknown };
+  return {
+    pid: validPid(record.pid),
+    boot: record.boot ?? {},
+    ...(typeof record.host === 'string' && { host: record.host }),
+    ino,
+  };
 }

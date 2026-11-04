@@ -47,6 +47,23 @@ describe('loadConfig', () => {
     expect(config.ollama.model).toBe('qwen3');
   });
 
+  it('lets MORNING_BRIEF_OLLAMA_HOST override the Ollama host, and ignores OLLAMA_HOST', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\nhost = "http://localhost:11434"\n',
+    );
+    const fromFile = await loadConfig({ path, env: { OLLAMA_HOST: '0.0.0.0' } });
+    expect(fromFile.ollama.host).toBe('http://localhost:11434');
+    const config = await loadConfig({
+      path,
+      env: { MORNING_BRIEF_OLLAMA_HOST: 'http://host.docker.internal:11434' },
+    });
+    expect(config.ollama.host).toBe('http://host.docker.internal:11434');
+    expect(config.ollama.model).toBe('qwen3');
+  });
+
   it('lets environment variables override the token and chat id', async () => {
     const dir = await makeTempDir();
     const path = join(dir, 'config.toml');

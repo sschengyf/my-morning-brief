@@ -9,18 +9,22 @@ const DEAD_PID = 2 ** 22 + 12345;
 const BOOT: Boot = { id: 'boot-a', time: Date.parse('2026-11-04T07:00:00Z') };
 
 async function lockContent(dir: string) {
-  return JSON.parse(await readFile(join(dir, LOCK_FILE), 'utf8')) as { pid: number; boot: Boot };
+  return JSON.parse(await readFile(join(dir, LOCK_FILE), 'utf8')) as {
+    pid: number;
+    boot: Boot;
+    host: string;
+  };
 }
 
-function writeLock(dir: string, pid: number, boot: Boot = BOOT) {
-  return writeFile(join(dir, LOCK_FILE), JSON.stringify({ pid, boot }));
+function writeLock(dir: string, pid: number, boot: Boot = BOOT, host?: string) {
+  return writeFile(join(dir, LOCK_FILE), JSON.stringify({ pid, boot, host }));
 }
 
 describe('acquireLock', () => {
-  it('records the pid and boot, and removes the lock on release', async () => {
+  it('records the pid, boot and host, and removes the lock on release', async () => {
     const dir = await makeTempDir();
-    const release = await acquireLock(dir, { pid: 1234, boot: BOOT });
-    expect(await lockContent(dir)).toEqual({ pid: 1234, boot: BOOT });
+    const release = await acquireLock(dir, { pid: 1234, boot: BOOT, host: 'mac' });
+    expect(await lockContent(dir)).toEqual({ pid: 1234, boot: BOOT, host: 'mac' });
     expect(await readdir(dir)).toEqual([LOCK_FILE]); // no temp file left behind
     await release();
     expect(await readdir(dir)).toEqual([]);
@@ -76,6 +80,23 @@ describe('acquireLock', () => {
     await writeFile(join(dir, LOCK_FILE), String(DEAD_PID));
     await acquireLock(dir, { pid: 1234, boot: BOOT });
     expect((await lockContent(dir)).pid).toBe(1234);
+  });
+
+  it('never takes over a lock from another host, whose processes it cannot see', async () => {
+    const dir = await makeTempDir();
+    // The Mac's pnpm start, seen from a container sharing data/ (or the other way round).
+    await writeLock(dir, DEAD_PID, { time: BOOT.time! - 86_400_000 }, 'mac');
+    await expect(
+      acquireLock(dir, { pid: 1, boot: { id: 'vm', time: BOOT.time! }, host: 'morning-brief' }),
+    ).rejects.toThrow('属于另一台机器或容器（mac）上的实例');
+    expect((await lockContent(dir)).host).toBe('mac');
+  });
+
+  it('takes over its own container’s lock after a restart: same host, same pid 1', async () => {
+    const dir = await makeTempDir();
+    await writeLock(dir, 1, BOOT, 'morning-brief');
+    await acquireLock(dir, { pid: 1, boot: BOOT, host: 'morning-brief' });
+    expect(await lockContent(dir)).toMatchObject({ pid: 1, host: 'morning-brief' });
   });
 
   it('treats an empty or unreadable lock as stale', async () => {

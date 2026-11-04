@@ -458,6 +458,17 @@ describe('ChatCore chat', () => {
     expect(second.requests[1]![1]).toEqual({ role: 'assistant', content: '外面的早报 [N1]' });
   });
 
+  it('starts afresh after midnight, before the new day’s brief', async () => {
+    const { send, requests, advance } = await setup({ replies: ['昨天的早报 [N1]', '一'] });
+    await send('/brief');
+    await send('问题一');
+    advance({ hours: 15 }); // 01:00 the next day
+    await send('第一条新闻呢');
+    const chat = requests.at(-1)!;
+    expect(chat[0]!.content).toContain('今天的早报还没生成');
+    expect(chat.slice(1)).toEqual([{ role: 'user', content: '第一条新闻呢' }]);
+  });
+
   it('keeps the conversation going after its own /brief', async () => {
     const { send, requests } = await setup({ replies: ['早报', '一', '二'] });
     await send('/brief');

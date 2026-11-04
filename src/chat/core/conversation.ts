@@ -24,6 +24,8 @@ export interface TodayBrief {
 export class Conversation {
   private brief: TodayBrief | null = null;
   private messages: ChatMessage[] = [];
+  /** The date the conversation belongs to. */
+  private date: string | null = null;
 
   constructor(private readonly archive: Archive) {}
 
@@ -42,16 +44,23 @@ export class Conversation {
     const generatedAt = DateTime.fromISO(result.generatedAt).toMillis();
     this.brief = { date: result.date, generatedAt, text, news: result.news };
     this.messages = [{ role: 'assistant', content: text }];
+    this.date = result.date;
   }
 
   /**
    * Makes `today` the latest brief of `date`: keeps the one in memory unless
-   * the archive has a newer one (brief:once runs in another process), and
-   * drops it once the date has moved on.
+   * the archive has a newer one (brief:once runs in another process). Once
+   * the date has moved on, yesterday's brief and questions are dropped, so
+   * "the first story" cannot mean yesterday's.
    */
   async sync(date: string): Promise<void> {
+    if (this.date !== date) {
+      this.date = date;
+      this.brief = null;
+      this.messages = [];
+    }
     const stored = await this.archive.latestBrief(date);
-    const current = this.brief?.date === date ? this.brief : null;
+    const current = this.brief;
     const storedAt = stored ? DateTime.fromISO(stored.raw.generatedAt).toMillis() : -Infinity;
     if (!stored || (current && current.generatedAt >= storedAt)) {
       this.brief = current;

@@ -1,8 +1,8 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir, recordingLogger } from '../helpers.js';
-import { emptyState, loadState, saveState } from '../../src/infra/state.js';
+import { makeTempDir, recordingLogger } from '../../test/helpers.js';
+import { emptyState, loadState, saveState } from './state.js';
 
 describe('state', () => {
   it('starts empty when there is no state file', async () => {

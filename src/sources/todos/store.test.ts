@@ -1,9 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir } from '../helpers.js';
-import { fetchTodos, formatTodos } from '../../src/sources/todos/source.js';
-import { addTodo, completeTodo, listTodos } from '../../src/sources/todos/store.js';
+import { makeTempDir } from '../../../test/helpers.js';
+import { fetchTodos, formatTodos } from './source.js';
+import { addTodo, completeTodo, listTodos } from './store.js';
 
 async function todoFile(content?: string): Promise<string> {
   const file = join(await makeTempDir(), 'todo.md');

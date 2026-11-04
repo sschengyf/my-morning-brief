@@ -1,9 +1,9 @@
+import { ChannelType, type Client, Events, MessageFlags } from 'discord.js';
 import { EventEmitter } from 'node:events';
-import { ChannelType, Events, MessageFlags, type Client } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
-import { recordingLogger } from '../helpers.js';
-import { DiscordChannel } from '../../src/chat/discord/adapter.js';
-import { interactionText, slashCommands } from '../../src/chat/discord/slash-commands.js';
+import { recordingLogger } from '../../../test/helpers.js';
+import { DiscordChannel } from './adapter.js';
+import { interactionText, slashCommands } from './slash-commands.js';
 
 const OWNER = '123456789012345678';
 

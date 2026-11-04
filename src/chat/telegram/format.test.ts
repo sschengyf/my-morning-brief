@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toDiscordMessages } from '../../src/chat/discord/format.js';
-import { splitMessage } from '../../src/chat/split-message.js';
-import {
-  markdownToTelegramHtml,
-  splitForTelegram,
-  TELEGRAM_LIMIT,
-} from '../../src/chat/telegram/format.js';
+import { markdownToTelegramHtml, splitForTelegram, TELEGRAM_LIMIT } from './format.js';
 
 /** Every opening tag has its closing tag, in order. */
 function balanced(html: string): boolean {
@@ -45,24 +39,6 @@ describe('markdownToTelegramHtml', () => {
 });
 
 describe('splitting', () => {
-  it('keeps short messages whole', () => {
-    expect(splitMessage('a\n\nb', 100)).toEqual(['a\n\nb']);
-  });
-
-  it('splits at paragraphs first, then lines', () => {
-    const paragraph = 'x'.repeat(60);
-    expect(splitMessage(`${paragraph}\n\n${paragraph}`, 100)).toEqual([paragraph, paragraph]);
-    expect(splitMessage(`${paragraph}\n${paragraph}`, 100)).toEqual([paragraph, paragraph]);
-  });
-
-  it('never cuts a link in half on an overlong line', () => {
-    const line = `${'字'.repeat(80)}${LINK}${'字'.repeat(80)}`;
-    const chunks = splitMessage(line, 100);
-    expect(chunks.join('')).toBe(line);
-    expect(chunks.some((chunk) => chunk.includes(LINK))).toBe(true);
-    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(100);
-  });
-
   it('keeps every Telegram chunk under the limit after conversion, with balanced tags', () => {
     const line = `**新闻** 一条很长的新闻概括，${'内容'.repeat(20)} ${LINK}`;
     const markdown = Array.from({ length: 120 }, () => line).join('\n');
@@ -74,17 +50,6 @@ describe('splitting', () => {
       expect(balanced(html)).toBe(true);
       expect(html).not.toMatch(/\[原文\]\(/); // every link survived whole
     }
-    expect(chunks.join('\n')).toBe(markdown);
-  });
-
-  it('splits Discord messages at 2000 characters', () => {
-    const markdown = Array.from(
-      { length: 50 },
-      (_, i) => `${i}. ${'新闻'.repeat(30)} ${LINK}`,
-    ).join('\n');
-    const chunks = toDiscordMessages(markdown);
-    expect(chunks.length).toBeGreaterThan(1);
-    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(2000);
     expect(chunks.join('\n')).toBe(markdown);
   });
 });

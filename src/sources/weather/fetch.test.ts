@@ -1,10 +1,9 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
-import type { Location } from '../../src/location/effective.js';
-import { describeWeatherCode } from '../../src/sources/weather/codes.js';
-import { fetchWeather } from '../../src/sources/weather/fetch.js';
+import type { Location } from '../../location/effective.js';
+import { describeWeatherCode } from './codes.js';
+import { fetchWeather } from './fetch.js';
+import { readFixture } from '../../../test/helpers.js';
 
 const AUCKLAND: Location = {
   city: 'Auckland',
@@ -18,10 +17,7 @@ const AUCKLAND: Location = {
 const NOW = DateTime.fromISO('2026-11-03T07:20', { zone: 'Pacific/Auckland' });
 
 async function fixtureFetch() {
-  const body = await readFile(
-    join(import.meta.dirname, '../fixtures/weather-auckland.json'),
-    'utf8',
-  );
+  const body = await readFixture('weather-auckland.json');
   return vi.fn<typeof fetch>(async () => new Response(body));
 }
 

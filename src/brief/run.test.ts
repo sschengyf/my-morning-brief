@@ -1,16 +1,16 @@
+import { DateTime } from 'luxon';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
-import { makeTempDir, minimalRawConfig, recordingLogger } from '../helpers.js';
-import { Archive } from '../../src/archive/archive.js';
-import type { ArchiveRaw } from '../../src/archive/types.js';
-import type { Sources } from '../../src/brief/data-sources.js';
-import { type BriefDeps, runBrief } from '../../src/brief/run.js';
-import { parseConfig } from '../../src/infra/config/parse.js';
-import { LlmService } from '../../src/llm/service.js';
-import type { LlmClient } from '../../src/llm/types.js';
-import type { NewsItem } from '../../src/sources/news/types.js';
+import { makeTempDir, minimalRawConfig, recordingLogger } from '../../test/helpers.js';
+import { Archive } from '../archive/archive.js';
+import type { ArchiveRaw } from '../archive/types.js';
+import { parseConfig } from '../infra/config/parse.js';
+import { LlmService } from '../llm/service.js';
+import type { LlmClient } from '../llm/types.js';
+import type { NewsItem } from '../sources/news/types.js';
+import type { Sources } from './data-sources.js';
+import { type BriefDeps, runBrief } from './run.js';
 
 // Tuesday 3 Nov 2026, 08:00 in Auckland.
 const TUESDAY = DateTime.fromISO('2026-11-02T19:00:00Z');

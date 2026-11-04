@@ -1,16 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  clearSecretsForTesting,
-  createLogger,
-  formatLine,
-  type LogLevel,
-  redact,
-  registerSecrets,
-} from '../../src/infra/logger.js';
+import { describe, expect, it } from 'vitest';
+import { createLogger, formatLine, type LogLevel, redact, registerSecrets } from './logger.js';
 
 const TOKEN = '7012345678:AAH9xYzExampleTokenValue_abcdefghijk';
-
-afterEach(() => clearSecretsForTesting());
 
 describe('redact', () => {
   it('removes Telegram tokens from grammY-style error stacks even before secrets are registered', () => {

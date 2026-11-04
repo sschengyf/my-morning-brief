@@ -1,0 +1,97 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { makeTempDir } from '../../../test/helpers.js';
+import { loadConfig } from './load.js';
+
+describe('loadConfig', () => {
+  it('asks the user to copy the example when config.toml is missing', async () => {
+    const dir = await makeTempDir();
+    await expect(loadConfig({ path: join(dir, 'config.toml'), env: {} })).rejects.toThrow(
+      '请先复制 config.example.toml 为 config.toml',
+    );
+  });
+
+  it('honours MORNING_BRIEF_CONFIG', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'custom.toml');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n',
+    );
+    const config = await loadConfig({ env: { MORNING_BRIEF_CONFIG: path } });
+    expect(config.ollama.model).toBe('qwen3');
+  });
+
+  it('lets environment variables override the token and chat id', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "from-file"\nchat_id = 0\n[ollama]\nmodel = "qwen3"\n',
+    );
+    const config = await loadConfig({
+      path,
+      env: { TELEGRAM_BOT_TOKEN: 'from-env-token', TELEGRAM_CHAT_ID: '987654' },
+    });
+    expect(config.telegram).toEqual({
+      enabled: true,
+      bot_token: 'from-env-token',
+      chat_id: 987654,
+    });
+  });
+
+  it('lets environment variables supply the Discord token and user id', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(path, '[discord]\nenabled = true\n[ollama]\nmodel = "qwen3"\n');
+    const config = await loadConfig({
+      path,
+      env: { DISCORD_BOT_TOKEN: 'env-discord-token', DISCORD_USER_ID: '123456789012345678' },
+    });
+    expect(config.discord).toEqual({
+      enabled: true,
+      bot_token: 'env-discord-token',
+      user_id: '123456789012345678',
+    });
+  });
+
+  it('supplies the token from the environment when the file has none', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(path, '[telegram]\nenabled = true\n[ollama]\nmodel = "qwen3"\n');
+    const config = await loadConfig({ path, env: { TELEGRAM_BOT_TOKEN: 'from-env-token' } });
+    expect(config.telegram.bot_token).toBe('from-env-token');
+  });
+
+  it('rejects a non-numeric TELEGRAM_CHAT_ID', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n',
+    );
+    await expect(loadConfig({ path, env: { TELEGRAM_CHAT_ID: 'me' } })).rejects.toThrow(
+      'telegram.chat_id 类型错误',
+    );
+  });
+
+  it('accepts a placeholder token when no channel is required', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      '[telegram]\nenabled = true\nbot_token = "在这里填 BotFather 给你的 token"\n[ollama]\nmodel = "qwen3"\n',
+    );
+    await expect(loadConfig({ path, env: {} })).rejects.toThrow('telegram.bot_token 还是示例值');
+    const config = await loadConfig({ path, env: {}, requireChannel: false });
+    expect(config.ollama.model).toBe('qwen3');
+  });
+
+  it('reports invalid TOML', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(path, '[telegram\n');
+    await expect(loadConfig({ path, env: {} })).rejects.toThrow('不是有效的 TOML');
+  });
+});

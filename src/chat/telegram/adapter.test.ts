@@ -1,10 +1,9 @@
-import { Bot, GrammyError } from 'grammy';
+import { Bot } from 'grammy';
 import type { Update } from 'grammy/types';
 import { describe, expect, it, vi } from 'vitest';
-import { recordingLogger } from '../helpers.js';
-import type { ChatIO } from '../../src/chat/channel.js';
-import { TelegramChannel } from '../../src/chat/telegram/adapter.js';
-import { sendTelegramMarkdown } from '../../src/chat/telegram/send.js';
+import { recordingLogger } from '../../../test/helpers.js';
+import type { ChatIO } from '../channel.js';
+import { TelegramChannel } from './adapter.js';
 
 const OWNER = 42;
 
@@ -101,32 +100,5 @@ describe('TelegramChannel', () => {
         fakeBot().bot,
       ).ready,
     ).toBe(false);
-  });
-});
-
-describe('sendTelegramMarkdown', () => {
-  it('resends as plain text when Telegram cannot parse the HTML', async () => {
-    const sendMessage = vi
-      .fn()
-      .mockRejectedValueOnce(
-        new GrammyError(
-          'x',
-          { ok: false, error_code: 400, description: "Bad Request: can't parse entities" },
-          'sendMessage',
-          {},
-        ),
-      )
-      .mockResolvedValue(undefined);
-    await sendTelegramMarkdown({ sendMessage }, OWNER, '**a**');
-    expect(sendMessage.mock.calls[1]).toEqual([
-      OWNER,
-      '**a**',
-      { link_preview_options: { is_disabled: true } },
-    ]);
-  });
-
-  it('rethrows other errors so the caller can retry', async () => {
-    const sendMessage = vi.fn().mockRejectedValue(new Error('network down'));
-    await expect(sendTelegramMarkdown({ sendMessage }, OWNER, 'a')).rejects.toThrow('network down');
   });
 });

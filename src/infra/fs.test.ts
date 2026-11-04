@@ -1,13 +1,8 @@
 import { chmod, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir } from '../helpers.js';
-import {
-  cleanupTempFiles,
-  DataDirError,
-  ensureDataDir,
-  writeFileAtomic,
-} from '../../src/infra/fs.js';
+import { makeTempDir } from '../../test/helpers.js';
+import { cleanupTempFiles, DataDirError, ensureDataDir, writeFileAtomic } from './fs.js';
 
 describe('writeFileAtomic', () => {
   it('creates and replaces files', async () => {

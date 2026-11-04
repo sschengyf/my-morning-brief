@@ -36,6 +36,8 @@ const moduleBoundaries = {
   create(context) {
     const file = context.filename;
     const from = moduleOf(file);
+    // Tests may reach into other modules' files to test them directly; layering still applies.
+    const isTest = file.endsWith('.test.ts');
     if (from !== null && !LAYERS.includes(from)) {
       context.report({ loc: { line: 1, column: 0 }, messageId: 'unknown', data: { module: from } });
       return {};
@@ -46,7 +48,7 @@ const moduleBoundaries = {
       const target = resolve(dirname(file), spec);
       const to = moduleOf(target);
       if (to === null || to === from) return;
-      if (relative(resolve(SRC, to), target) !== 'index.js') {
+      if (!isTest && relative(resolve(SRC, to), target) !== 'index.js') {
         context.report({ node: node.source, messageId: 'deep', data: { module: to } });
       }
       if (from !== null && LAYERS.indexOf(to) >= LAYERS.indexOf(from)) {

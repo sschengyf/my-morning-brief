@@ -29,7 +29,8 @@ For anything touching data sources, the model or prompts, also run `npm run brie
 - `src/` is split into modules (top-level folders). See `PLAN.md` section 3 for what each holds.
 - Other modules import a module only through its `index.ts`, which exports only what other modules use. Files inside a module import each other directly.
 - Dependencies point down only: `infra → location → sources → llm → archive → brief → chat → scheduler → app`. `eslint.config.js` (`local/module-boundaries`) enforces both rules; add new modules to its `LAYERS`.
-- File and folder names are kebab-case. Tests mirror `src/` under `test/` and may import a module's internal files.
+- File and folder names are kebab-case.
+- Unit tests sit next to the code they test: `src/llm/sanitize.ts` → `src/llm/sanitize.test.ts`, one test file per source file. Tests may import other modules' internal files (the boundary rule exempts `*.test.ts`; layering still applies). Shared helpers and fixtures live in `test/` (`test/helpers.ts`, `readFixture('news/rnz.xml')`).
 - Match the surrounding code: small functions, comments only where the reason is not obvious, prettier formatting.
 - Dependencies are pinned to exact versions (`.npmrc` has `save-exact=true`); install with `npm ci`.
 

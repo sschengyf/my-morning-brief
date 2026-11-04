@@ -1,10 +1,15 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach } from 'vitest';
 import { parseConfig } from '../src/infra/config/parse.js';
 import type { Config } from '../src/infra/config/schema.js';
 import type { Logger } from '../src/infra/logger.js';
+
+/** Reads a file from test/fixtures, e.g. readFixture('news/rnz.xml'). */
+export function readFixture(path: string): Promise<string> {
+  return readFile(join(import.meta.dirname, 'fixtures', path), 'utf8');
+}
 
 const tempDirs: string[] = [];
 

@@ -1,28 +1,28 @@
+import { DateTime } from 'luxon';
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir, minimalRawConfig, recordingLogger } from '../helpers.js';
-import { Archive } from '../../src/archive/archive.js';
-import type { Sources } from '../../src/brief/data-sources.js';
-import { runBrief } from '../../src/brief/run.js';
-import type { ChatIO } from '../../src/chat/channel.js';
-import { ChatCore } from '../../src/chat/core/chat-core.js';
-import { nextBriefTime, placeName } from '../../src/chat/core/display.js';
-import { linksToIds } from '../../src/chat/core/links.js';
-import { cityQueries, parseCommand, parseHistoryDate } from '../../src/chat/core/parse.js';
-import { parseConfig } from '../../src/infra/config/parse.js';
-import { LlmService } from '../../src/llm/service.js';
-import type { ChatMessage, LlmClient } from '../../src/llm/types.js';
-import { searchCity } from '../../src/location/geocoding.js';
-import type { NewsItem } from '../../src/sources/news/types.js';
+import {
+  makeTempDir,
+  minimalRawConfig,
+  readFixture,
+  recordingLogger,
+} from '../../../test/helpers.js';
+import { Archive } from '../../archive/archive.js';
+import type { Sources } from '../../brief/data-sources.js';
+import { runBrief } from '../../brief/run.js';
+import { parseConfig } from '../../infra/config/parse.js';
+import { LlmService } from '../../llm/service.js';
+import type { ChatMessage, LlmClient } from '../../llm/types.js';
+import { searchCity } from '../../location/geocoding.js';
+import type { NewsItem } from '../../sources/news/types.js';
+import type { ChatIO } from '../channel.js';
+import { ChatCore } from './chat-core.js';
 
 // Tuesday 3 Nov 2026, 10:00 in Auckland.
 const NOW = DateTime.fromISO('2026-11-02T21:00:00Z');
 
-const wellington = JSON.parse(
-  await readFile(new URL('../fixtures/geocoding-wellington.json', import.meta.url), 'utf8'),
-) as unknown;
+const wellington = JSON.parse(await readFixture('geocoding-wellington.json')) as unknown;
 
 const SHANGHAI = {
   results: [
@@ -130,64 +130,6 @@ async function setup(options: Setup = {}) {
   };
   return { config, core, archive, counts, sources, requests, send, advance, io, replied };
 }
-
-describe('parsing helpers', () => {
-  it('parses commands, with or without the bot name', () => {
-    expect(parseCommand('/add@brief_bot  交水费 ')).toEqual({ name: 'add', args: '交水费' });
-    expect(parseCommand('/TODO')).toEqual({ name: 'todo', args: '' });
-    expect(parseCommand('今天/明天')).toBeNull();
-  });
-
-  it('reads /city arguments as a name, then a name plus country', () => {
-    expect(cityQueries('Los Angeles, United States')).toEqual([
-      { name: 'Los Angeles', country: 'United States' },
-    ]);
-    expect(cityQueries('Wellington New Zealand')).toEqual([
-      { name: 'Wellington New Zealand' },
-      { name: 'Wellington New', country: 'Zealand' },
-      { name: 'Wellington', country: 'New Zealand' },
-    ]);
-  });
-
-  it('names places without empty parts or a region that repeats the city', () => {
-    expect(placeName({ city: 'Hong Kong' })).toBe('Hong Kong');
-    expect(placeName({ city: 'Shanghai', region: 'Shanghai', country: 'China' })).toBe(
-      'Shanghai（China）',
-    );
-    expect(placeName({ city: 'Wellington', region: 'Kansas', country: 'United States' })).toBe(
-      'Wellington（Kansas, United States）',
-    );
-  });
-
-  it('parses history dates relative to today', () => {
-    const today = DateTime.fromISO('2026-11-03', { zone: 'Pacific/Auckland' });
-    expect(parseHistoryDate('昨天', today)).toBe('2026-11-02');
-    expect(parseHistoryDate('前天', today)).toBe('2026-11-01');
-    expect(parseHistoryDate('2026-10-30', today)).toBe('2026-10-30');
-    expect(parseHistoryDate('11-02', today)).toBe('2026-11-02');
-    expect(parseHistoryDate('11/2', today)).toBe('2026-11-02');
-    expect(parseHistoryDate('12-25', today)).toBe('2025-12-25'); // not yet this year
-    expect(parseHistoryDate('02-30', today)).toBeNull();
-    expect(parseHistoryDate('last week', today)).toBeNull();
-    expect(parseHistoryDate('constructor', today)).toBeNull();
-  });
-
-  it('finds the next brief time in the given timezone', () => {
-    expect(nextBriefTime(NOW, 'Pacific/Auckland', '08:00').toISO()).toBe(
-      '2026-11-04T08:00:00.000+13:00',
-    );
-    expect(nextBriefTime(NOW, 'Asia/Shanghai', '08:00').toISO()).toBe(
-      '2026-11-03T08:00:00.000+08:00',
-    );
-  });
-
-  it('turns news links back into ids', () => {
-    const news = [{ ...item(2), id: 'N2' }];
-    expect(linksToIds('看 [原文](https://rnz.test/2) 和 [原文](https://other.test)', news)).toBe(
-      '看 [N2] 和 [原文](https://other.test)',
-    );
-  });
-});
 
 describe('ChatCore commands', () => {
   it('shows help and rejects unknown commands', async () => {

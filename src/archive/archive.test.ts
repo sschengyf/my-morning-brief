@@ -1,10 +1,10 @@
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir, recordingLogger } from '../helpers.js';
-import { Archive } from '../../src/archive/archive.js';
-import type { ArchiveEntry, ArchiveRaw, BriefKind } from '../../src/archive/types.js';
-import type { NumberedNews } from '../../src/sources/news/types.js';
+import { makeTempDir, recordingLogger } from '../../test/helpers.js';
+import type { NumberedNews } from '../sources/news/types.js';
+import { Archive } from './archive.js';
+import type { ArchiveEntry, ArchiveRaw, BriefKind } from './types.js';
 
 function news(id: string, link: string): NumberedNews {
   return { id, source: 'RNZ', title: id, link, publishedAt: null, summary: '', titleOnly: true };

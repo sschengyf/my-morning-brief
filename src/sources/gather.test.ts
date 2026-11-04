@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
-import type { Location } from '../../src/location/effective.js';
-import { dateLine, gatherText, includeNews } from '../../src/sources/gather.js';
+import type { Location } from '../location/effective.js';
+import { dateLine, gatherText, includeNews } from './gather.js';
 
 const AUCKLAND: Location = {
   city: 'Auckland',

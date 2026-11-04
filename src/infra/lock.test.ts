@@ -1,8 +1,8 @@
 import { readdir, readFile, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { makeTempDir } from '../helpers.js';
-import { acquireLock, LOCK_FILE, LockError } from '../../src/infra/lock.js';
+import { makeTempDir } from '../../test/helpers.js';
+import { acquireLock, LOCK_FILE, LockError } from './lock.js';
 
 // A pid far above any real one, so it is never alive.
 const DEAD_PID = 2 ** 22 + 12345;

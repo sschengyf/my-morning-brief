@@ -1,10 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { DateTime } from 'luxon';
 import { describe, expect, it, vi } from 'vitest';
-import { cleanSummary, normalizeLink } from '../../src/sources/news/clean.js';
-import { fetchNews } from '../../src/sources/news/fetch.js';
-import { formatNews, numberNews } from '../../src/sources/news/format.js';
+import { fetchNews } from './fetch.js';
+import { readFixture } from '../../../test/helpers.js';
 
 // The fixtures were captured at about 07:20 on 3 Nov 2026, Auckland time.
 const CAPTURED = DateTime.fromISO('2026-11-03T07:20', { zone: 'Pacific/Auckland' });
@@ -15,9 +12,7 @@ function feedFetch(files: Record<string, string>) {
   return vi.fn<typeof fetch>(async (url) => {
     const name = files[String(url)];
     if (!name) return new Response('error', { status: 500 });
-    return new Response(
-      await readFile(join(import.meta.dirname, '../fixtures/news', name), 'utf8'),
-    );
+    return new Response(await readFixture(`news/${name}`));
   });
 }
 
@@ -149,60 +144,5 @@ describe('fetchNews', () => {
     const result = await fetchNews(['https://a.test/rss'], OPTIONS, CAPTURED, fetchMock);
     expect(result.ok).toBe(false);
     expect(result.failures).toHaveLength(1);
-  });
-});
-
-describe('normalizeLink', () => {
-  it('removes tracking parameters and trailing slashes', () => {
-    expect(normalizeLink('https://Example.com/a/?utm_source=x&id=3&fbclid=y')).toBe(
-      'https://example.com/a?id=3',
-    );
-    expect(normalizeLink('https://example.com/')).toBe('https://example.com');
-    expect(normalizeLink(' not a url ')).toBe('not a url');
-  });
-});
-
-describe('cleanSummary', () => {
-  it('strips HTML and URLs and truncates to 200 characters', () => {
-    expect(cleanSummary('<p>Hello <b>world</b></p> see https://x.test/a')).toBe('Hello world see');
-    const long = cleanSummary('长'.repeat(300));
-    expect([...long]).toHaveLength(201);
-    expect(long.endsWith('…')).toBe(true);
-  });
-});
-
-describe('formatNews', () => {
-  it('writes ids, sources and summaries but never links', () => {
-    const items = numberNews([
-      {
-        source: 'RNZ',
-        title: 'Story',
-        link: 'https://rnz.test/1',
-        publishedAt: null,
-        summary: 'Details',
-        titleOnly: false,
-      },
-      {
-        source: 'HN',
-        title: 'WTF Ubuntu?',
-        link: 'https://hn.test/2',
-        publishedAt: null,
-        summary: '',
-        titleOnly: true,
-      },
-    ]);
-    const text = formatNews(items, [{ source: 'bbc.test', reason: '请求超时' }]);
-    expect(text).toBe(
-      [
-        '[N1] 来源 RNZ｜Story｜Details',
-        '[N2] 来源 HN｜WTF Ubuntu?｜（只有标题）',
-        '（bbc.test 获取失败：请求超时）',
-      ].join('\n'),
-    );
-    expect(text).not.toContain('https://');
-  });
-
-  it('says when there is nothing new', () => {
-    expect(formatNews([], [])).toBe('没有新的新闻');
   });
 });

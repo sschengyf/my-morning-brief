@@ -75,7 +75,7 @@ my-morning-brief/
 │   │   ├── telegram/           #   adapter.ts（grammY）、send.ts、format.ts（Markdown → Telegram HTML）
 │   │   └── discord/            #   adapter.ts（discord.js，只处理私信）、slash-commands.ts、format.ts
 │   └── scheduler/              # 阶段 6：每日定时 + 补发逻辑
-├── test/                       # 目录结构和 src/ 对应；fixtures/ 里是示例 .ics、RSS、天气和城市查询 JSON
+├── test/                       # 测试共用的 helpers.ts 和 fixtures/（示例 .ics、RSS、天气和城市查询 JSON）；测试本身在 src/ 里
 ├── config.example.toml
 ├── data/                       # 程序产生的数据（paths.data_dir 的默认值），不提交 git
 ├── todo.example.md             # 待办文件示例；真正的 todo.md 在 data/ 下
@@ -90,7 +90,7 @@ my-morning-brief/
 - `src/` 下每个顶层目录是一个模块。别的模块只能通过它的 `index.ts` 引用它，不能直接引用它内部的文件；`index.ts` 只导出别的模块真正用到的东西。模块内部的文件互相直接引用。
 - 依赖只能指向更底层的模块：`infra → location → sources → llm → archive → brief → chat → scheduler → app`（左边最底层）。比如 `llm` 不能引用 `brief`，`sources` 不能引用 `llm`。新加模块时要把它放进这个顺序。
 - 文件和目录名用小写短横线（kebab-case），例如 `select-news.ts`、`chat-core.ts`。
-- 测试可以直接引用模块内部的文件，方便单独测一个函数。
+- 单元测试放在被测文件旁边，一个源文件对应一个测试文件，例如 `src/llm/sanitize.ts` 和 `src/llm/sanitize.test.ts`。测试可以直接引用别的模块内部的文件，方便单独测一个函数（模块边界规则对 `*.test.ts` 放宽这一条，依赖方向照样检查）。
 
 程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`logs/`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
 
@@ -574,7 +574,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
   - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的定时（`/schedule`）错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。
   - **所有容器用同一个模型名和相同的 `num_ctx`**：模型名不同或 `num_ctx` 不同，Ollama 会反复卸载、重新加载模型，非常慢。`keep_alive` 按最长的设置。
   - **待办和 Obsidian**：`todo.md` 在容器的数据卷里；想用 Obsidian 编辑，要把那个文件挂进容器，或者只通过机器人管理。
-  - **要做的事**：`Dockerfile`（`node:24-slim`，`npm ci --omit=dev` 之外要保留 `tsx`，非 root 用户运行，`STOPSIGNAL SIGTERM`）、`docker-compose.example.yml`（两个用户示例 + 可选的 Ollama 服务）、README 里的多用户部署说明；然后实测两三个容器同时生成早报的排队时间和内存占用。
+  - **要做的事**：`.dockerignore`（排除 `**/*.test.ts`、`test/`、`data/`、`config.toml`、`node_modules/`）、`Dockerfile`（`node:24-slim`，`npm ci --omit=dev` 之外要保留 `tsx`，非 root 用户运行，`STOPSIGNAL SIGTERM`）、`docker-compose.example.yml`（两个用户示例 + 可选的 Ollama 服务）、README 里的多用户部署说明；然后实测两三个容器同时生成早报的排队时间和内存占用。
 - **部署到服务器**：加 Dockerfile 和 systemd unit 示例（多用户时见上一条）。迁移前要先决定两件事：
   - **模型放在哪里**：（a）服务器只跑机器人和定时任务，通过 Tailscale 等私有网络调用家里 Mac 上的 Ollama（模型仍在本地，但 Mac 必须醒着；连不上时走降级早报）；（b）租带 GPU 的服务器自己跑 Ollama（数据不出自己的机器，但费用高）；（c）改用云端模型 API（便宜、稳定，但违背“推理完全在本机”的初衷，日程和待办会发给模型服务商）。
   - **待办文件怎么同步**：服务器上的 `todo.md` 不再和本机 Obsidian 是同一个文件。可以只通过机器人管理待办，或者用 git、Syncthing 同步，需要处理两边同时修改的冲突。

@@ -8,7 +8,8 @@ import {
   type NumberedNews,
   numberNews,
 } from '#/sources/index.js';
-import { BRIEF_PROMPT, CHAT_PROMPT } from './prompts.js';
+import { formatPickInput, parsePicks, type PickRequest } from './pick-news.js';
+import { BRIEF_PROMPT, CHAT_PROMPT, SELECT_PROMPT } from './prompts.js';
 import { sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
 import type { ChatMessage, LlmClient } from './types.js';
 
@@ -75,6 +76,24 @@ export class LlmService {
     const result = this.queue.then(start, start);
     this.queue = result.catch(() => undefined);
     return result;
+  }
+
+  /**
+   * Asks the model which candidates belong in the brief. Returns candidate
+   * numbers (C3 → 3) as written; the caller checks them. Runs as part of the brief.
+   */
+  pickNews(request: PickRequest): Promise<number[]> {
+    const input = formatPickInput(request);
+    return this.run('brief', async () => {
+      const reply = await this.client.chat(
+        [
+          { role: 'system', content: SELECT_PROMPT },
+          { role: 'user', content: input },
+        ],
+        { timeoutSeconds: request.timeoutSeconds },
+      );
+      return parsePicks(stripThink(reply));
+    });
   }
 
   writeBrief(data: BriefData): Promise<BriefResult> {

@@ -40,8 +40,13 @@ export function gatherText(input: GatherInput): string {
 
   return [
     dateLine(input.now, input.location),
-    ...sections.map(([type, body]) => `<数据 类型="${type}">\n${defuseTags(body)}\n</数据>`),
+    ...sections.map(([type, body]) => wrapData(type, body)),
   ].join('\n\n');
+}
+
+/** One <数据> section, with any tags inside defused. */
+export function wrapData(type: string, body: string): string {
+  return `<数据 类型="${type}">\n${defuseTags(body)}\n</数据>`;
 }
 
 function defuseTags(text: string): string {

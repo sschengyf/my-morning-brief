@@ -6,6 +6,7 @@ import { makeTempDir, minimalRawConfig, recordingLogger } from '../../test/helpe
 import { Archive } from '#/archive/archive.js';
 import type { ArchiveRaw } from '#/archive/types.js';
 import { parseConfig } from '#/infra/config/parse.js';
+import { SELECT_PROMPT } from '#/llm/prompts.js';
 import { LlmService } from '#/llm/service.js';
 import type { LlmClient } from '#/llm/types.js';
 import type { NewsItem } from '#/sources/news/types.js';
@@ -43,6 +44,8 @@ function fakeSources(newsItems = [item(1), item(2)]): Sources & { newsCalls: num
 async function setup(
   options: {
     reply?: string | Error;
+    /** Reply to the news selection request; defaults to `reply`. */
+    pickReply?: string | Error;
     sources?: Sources;
     now?: DateTime;
     config?: Record<string, unknown>;
@@ -58,8 +61,10 @@ async function setup(
   const client: LlmClient = {
     chat: async (messages) => {
       calls.push(messages.at(-1)!.content);
-      if (options.reply instanceof Error) throw options.reply;
-      return options.reply ?? '今天晴，看看 [N2]';
+      const picking = messages[0]?.content === SELECT_PROMPT;
+      const reply = picking && 'pickReply' in options ? options.pickReply : options.reply;
+      if (reply instanceof Error) throw reply;
+      return reply ?? '今天晴，看看 [N2]';
     },
   };
   const logger = recordingLogger();
@@ -118,6 +123,55 @@ describe('runBrief', () => {
     );
     expect(input.startsWith('你是用户的私人助理')).toBe(true);
     expect(input).toContain(calls[0]);
+  });
+
+  it('lets the model pick brief_count news before writing, and archives how', async () => {
+    const items = Array.from({ length: 6 }, (_, i) => item(i + 1));
+    const { deps, archive, calls, send } = await setup({
+      sources: fakeSources(items),
+      config: { news: { select_count: 5, brief_count: 2 } },
+      pickReply: 'C4,C2',
+    });
+    const result = await runBrief({ kind: 'manual', send, archive: true }, deps);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain('要挑的条数：2');
+    expect(calls[0]).toContain('[C5] 来源 RNZ｜Story 5');
+    expect(calls[0]).not.toContain('Story 6');
+    expect(result.news.map((n) => [n.id, n.title])).toEqual([
+      ['N1', 'Story 4'],
+      ['N2', 'Story 2'],
+    ]);
+    expect(result.text).toBe('今天晴，看看 [原文](https://rnz.test/2)');
+    const raw = await archive.readRaw('2026-11-03');
+    expect(raw?.news).toMatchObject({ method: 'model', poolSize: 5, usedIds: ['N2'] });
+  });
+
+  it('still writes the brief when picking fails, from the first round-robin items', async () => {
+    const items = Array.from({ length: 6 }, (_, i) => item(i + 1));
+    const { deps, archive, send } = await setup({
+      sources: fakeSources(items),
+      config: { news: { select_count: 5, brief_count: 2 } },
+      pickReply: new Error('模型 120 秒内没有回复'),
+    });
+    const result = await runBrief({ kind: 'manual', send, archive: true }, deps);
+
+    expect(result.status).toBe('sent');
+    expect(result.news.map((n) => n.title)).toEqual(['Story 1', 'Story 2']);
+    const raw = await archive.readRaw('2026-11-03');
+    expect(raw?.news?.method).toBe('round_robin_fallback');
+  });
+
+  it('does not ask the model to pick for a fallback brief', async () => {
+    const items = Array.from({ length: 6 }, (_, i) => item(i + 1));
+    const { deps, calls, send } = await setup({
+      sources: fakeSources(items),
+      config: { news: { select_count: 5, brief_count: 2 } },
+    });
+    const result = await runBrief({ kind: 'manual', send, archive: false, fallback: true }, deps);
+
+    expect(calls).toHaveLength(0);
+    expect(result.news.map((n) => n.title)).toEqual(['Story 1', 'Story 2']);
   });
 
   it('writes nothing when archive is false', async () => {

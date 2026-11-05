@@ -97,6 +97,21 @@ describe('OllamaClient', () => {
   });
 });
 
+describe('OllamaClient timeouts', () => {
+  it('uses a per-request timeout when one is given', async () => {
+    const ollama = fakeOllama();
+    const slow = vi.fn<typeof fetch>(async (input, init) =>
+      new URL(String(input)).pathname === '/api/chat'
+        ? Promise.reject(new DOMException('timed out', 'TimeoutError'))
+        : ollama.fetchMock(input, init),
+    );
+    const client = new OllamaClient(OLLAMA, slow);
+    await expect(
+      client.chat([{ role: 'user', content: 'hi' }], { timeoutSeconds: 120 }),
+    ).rejects.toThrow('模型 120 秒内没有回复');
+  });
+});
+
 describe('sameModel', () => {
   it('treats a missing tag as :latest', () => {
     expect(sameModel('qwen3', 'qwen3:latest')).toBe(true);

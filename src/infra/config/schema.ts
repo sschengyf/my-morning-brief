@@ -68,12 +68,17 @@ export const schema = z.object({
     .object({
       max_items_per_feed: positiveInt.default(10),
       max_age_hours: positiveInt.default(48),
-      select_count: positiveInt.default(10),
+      select_count: positiveInt.default(40),
+      brief_count: positiveInt.default(10),
       dedup_days: nonNegativeInt.default(3),
       feeds: z.array(z.url()).default([]),
       interests: z.array(z.string().min(1)).default([]),
       avoid: z.array(z.string().min(1)).default([]),
       select_timeout_seconds: positiveInt.default(120),
+    })
+    .refine((news) => news.brief_count <= news.select_count, {
+      message: '不能大于 news.select_count',
+      path: ['brief_count'],
     })
     .prefault({}),
   todo: z.object({ file: z.string().min(1).default('todo.md') }).prefault({}),

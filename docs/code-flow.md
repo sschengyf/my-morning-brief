@@ -74,7 +74,7 @@ sequenceDiagram
 flowchart TD
     A["getEffectiveLocation()<br/>location.json 有就用它，否则用 config 里的家"] --> B
     B["并行抓取 4 个数据源<br/>天气 Open-Meteo · 日历 .ics · 待办 todo.md · 新闻 RSS<br/>（周末且 weekend_news = false 时不抓新闻）"] --> C
-    C{"有新闻？"} -- 有 --> D["selectNews()<br/>去掉最近 dedup_days 天早报里用过的链接<br/>按源轮流挑 select_count 条"]
+    C{"有新闻？"} -- 有 --> D["selectNews()<br/>去掉最近 dedup_days 天早报里用过的链接<br/>按源轮流取 select_count 条候选<br/>llm.pickNews()：模型看标题挑 brief_count 条（失败就取轮流的前几条）"]
     C -- 没有 --> E
     D --> E{"fallback？<br/>（定时器重试用完时）"}
     E -- 否 --> F["llm.writeBrief()<br/>拼成 #60;数据#62; 文本，超过 num_ctx 75% 就减新闻<br/>Ollama 生成 → sanitizeOutput()"]

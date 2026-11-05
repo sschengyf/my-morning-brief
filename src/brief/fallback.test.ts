@@ -44,7 +44,7 @@ function briefData(newsCount: number, summaryLength = 10): BriefData {
 }
 
 describe('formatFallbackBrief', () => {
-  it('lists the raw sections and the first five news with links', () => {
+  it('lists the raw sections and every selected news item with a link', () => {
     const data = briefData(7);
     data.gather.calendar = '09:00 Call — join at https://evil.test/zoom';
     expect(formatFallbackBrief(data)).toBe(
@@ -55,7 +55,9 @@ describe('formatFallbackBrief', () => {
         '📅 **日程**\n09:00 Call — join at',
         '✅ **待办**\n1. Renew passport',
         '📰 **新闻**\n' +
-          [1, 2, 3, 4, 5].map((i) => `${i}. Story ${i} [原文](https://rnz.test/${i})`).join('\n') +
+          [1, 2, 3, 4, 5, 6, 7]
+            .map((i) => `${i}. Story ${i} [原文](https://rnz.test/${i})`)
+            .join('\n') +
           '\n（hnrss 获取失败：HTTP 500）',
       ].join('\n\n'),
     );

@@ -3,9 +3,14 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatOptions {
+  /** Overrides ollama.timeout_seconds for this request. */
+  timeoutSeconds?: number;
+}
+
 export interface LlmClient {
   /** Returns the assistant's reply text. */
-  chat(messages: ChatMessage[]): Promise<string>;
+  chat(messages: ChatMessage[], options?: ChatOptions): Promise<string>;
 }
 
 /** Ollama is not running, the model is missing, or a request failed or timed out. */

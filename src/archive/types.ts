@@ -19,6 +19,8 @@ export interface NewsRecord {
   /** Candidate links dropped because a recent brief already used them. */
   dedupExcluded: string[];
   method: SelectionMethod;
+  /** How many round-robin candidates the selection chose from; absent in older archives. */
+  poolSize?: number;
   /** What the model saw, with ids. Maps each id to its link. */
   selected: NumberedNews[];
   /** Ids the final brief mentions. */
@@ -74,4 +76,9 @@ export interface StoredBrief {
   schedule?: string;
 }
 
-export type SelectionMethod = 'round_robin';
+/**
+ * model: picked by the model (topped up from the round-robin order if short).
+ * round_robin: the model was not asked (few candidates, or a fallback brief).
+ * round_robin_fallback: the model failed, so the first round-robin items were used.
+ */
+export type SelectionMethod = 'model' | 'round_robin' | 'round_robin_fallback';

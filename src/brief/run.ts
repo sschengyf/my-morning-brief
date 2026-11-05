@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { Archive, ArchiveRaw, BriefKind, NewsRecord, ScheduleRef } from '#/archive/index.js';
 import { type Config, logger as defaultLogger, type Logger } from '#/infra/index.js';
-import { BRIEF_PROMPT, type BriefData, type LlmService } from '#/llm/index.js';
+import { BRIEF_PROMPT, type BriefData, type LlmService, type PickRequest } from '#/llm/index.js';
 import { getEffectiveLocation, type Location } from '#/location/index.js';
 import {
   formatNews,
@@ -11,7 +11,7 @@ import {
   numberNews,
 } from '#/sources/index.js';
 import { defaultSources, type Sources } from './data-sources.js';
-import { FALLBACK_NEWS_COUNT, formatFallbackBrief } from './fallback.js';
+import { formatFallbackBrief } from './fallback.js';
 import { selectNews } from './select-news.js';
 
 export interface BriefDeps {
@@ -90,7 +90,9 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
         logger.warn('读取最近的归档失败，这次不做跨天去重', error);
         return new Set<string>();
       });
-    const selection = selectNews(fetched.items, recent, config.news);
+    // A fallback brief is the last resort when the model is down: do not wait on it here.
+    const pick = options.fallback ? null : (request: PickRequest) => llm.pickNews(request);
+    const selection = await selectNews(fetched.items, recent, config.news, pick, logger);
     data = { ...data, news: { items: selection.items, failures: fetched.failures } };
     newsRecord = {
       ok: fetched.ok,
@@ -99,6 +101,7 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
       tooOld: fetched.tooOld,
       dedupExcluded: fetched.items.filter((item) => recent.has(item.link)).map((i) => i.link),
       method: selection.method,
+      poolSize: selection.poolSize,
       selected: [],
       usedIds: [],
     };
@@ -123,7 +126,7 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
   const fallback = options.fallback ?? false;
   if (fallback) {
     text = formatFallbackBrief(data);
-    news = numberNews(data.news?.items.slice(0, FALLBACK_NEWS_COUNT) ?? []);
+    news = numberNews(data.news?.items ?? []);
     input = gatherText({
       ...data.gather,
       ...(data.news && { news: formatNews(news, data.news.failures) }),

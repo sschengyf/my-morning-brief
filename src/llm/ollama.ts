@@ -1,7 +1,7 @@
 import { Ollama } from 'ollama';
 import type { Config } from '#/infra/index.js';
 import { describeError } from '#/sources/index.js';
-import { type ChatMessage, type LlmClient, LlmError } from './types.js';
+import { type ChatMessage, type ChatOptions, type LlmClient, LlmError } from './types.js';
 
 const CHECK_TIMEOUT_MS = 20_000;
 
@@ -24,19 +24,28 @@ function timedFetch(fetchImpl: typeof fetch, timeoutMs: number): typeof fetch {
 
 export class OllamaClient implements LlmClient {
   private readonly quick: Ollama;
-  private readonly slow: Ollama;
+  /** One client per request timeout, since the timeout is built into its fetch. */
+  private readonly timed = new Map<number, Ollama>();
   /** Set once the startup check has passed; a failed check is retried on the next call. */
   private supportsThinking: boolean | undefined;
 
   constructor(
     private readonly config: Config['ollama'],
-    fetchImpl: typeof fetch = fetch,
+    private readonly fetchImpl: typeof fetch = fetch,
   ) {
     this.quick = new Ollama({ host: config.host, fetch: timedFetch(fetchImpl, CHECK_TIMEOUT_MS) });
-    this.slow = new Ollama({
-      host: config.host,
-      fetch: timedFetch(fetchImpl, config.timeout_seconds * 1000),
-    });
+  }
+
+  private withTimeout(seconds: number): Ollama {
+    let client = this.timed.get(seconds);
+    if (!client) {
+      client = new Ollama({
+        host: this.config.host,
+        fetch: timedFetch(this.fetchImpl, seconds * 1000),
+      });
+      this.timed.set(seconds, client);
+    }
+    return client;
   }
 
   /** Checks that Ollama runs and has the model, and reads whether it can think. */
@@ -58,11 +67,12 @@ export class OllamaClient implements LlmClient {
     this.supportsThinking = capabilities.includes('thinking');
   }
 
-  async chat(messages: ChatMessage[]): Promise<string> {
+  async chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<string> {
     if (this.supportsThinking === undefined) await this.check();
-    const { model, keep_alive, temperature, num_ctx, think, timeout_seconds } = this.config;
+    const { model, keep_alive, temperature, num_ctx, think } = this.config;
+    const timeoutSeconds = options.timeoutSeconds ?? this.config.timeout_seconds;
     try {
-      const response = await this.slow.chat({
+      const response = await this.withTimeout(timeoutSeconds).chat({
         model,
         messages,
         stream: false,
@@ -74,7 +84,7 @@ export class OllamaClient implements LlmClient {
       return response.message.content;
     } catch (error) {
       if (error instanceof DOMException && error.name === 'TimeoutError') {
-        throw new LlmError(`模型 ${timeout_seconds} 秒内没有回复`, { cause: error });
+        throw new LlmError(`模型 ${timeoutSeconds} 秒内没有回复`, { cause: error });
       }
       throw new LlmError(`模型请求失败：${describeError(error)}`, { cause: error });
     }

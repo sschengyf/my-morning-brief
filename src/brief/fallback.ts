@@ -1,8 +1,6 @@
 import { type BriefData, sanitizeOutput } from '#/llm/index.js';
 import { dateLine, numberNews } from '#/sources/index.js';
 
-export const FALLBACK_NEWS_COUNT = 5;
-
 /** A brief without the model: the raw sections, for when every model retry has failed. */
 export function formatFallbackBrief(data: BriefData): string {
   const { gather } = data;
@@ -14,7 +12,7 @@ export function formatFallbackBrief(data: BriefData): string {
     `✅ **待办**\n${sanitizeOutput(gather.todos)}`,
   ];
   if (data.news) {
-    const items = numberNews(data.news.items.slice(0, FALLBACK_NEWS_COUNT));
+    const items = numberNews(data.news.items);
     const lines = items.map(
       (item, index) => `${index + 1}. ${sanitizeOutput(item.title)} [原文](${item.link})`,
     );

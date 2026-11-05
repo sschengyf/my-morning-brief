@@ -28,6 +28,7 @@ describe('parseConfig', () => {
     });
     expect(config.ollama.num_ctx).toBe(16384);
     expect(config.news.feeds).toEqual([]);
+    expect(config.news).toMatchObject({ select_count: 40, brief_count: 10 });
     expect(config.monitor.healthcheck_url).toBe('');
     // Everything the program writes lives under data/, the one folder to mount or back up.
     expect(config.paths.data_dir).toBe(join(PROJECT_ROOT, 'data'));
@@ -115,6 +116,14 @@ describe('parseConfig', () => {
     expectConfigError(raw, 'brief.catch_up_hours 超出允许范围');
     raw.brief = { catch_up_hours: 1.5 };
     expect(parseConfig(raw).brief.catch_up_hours).toBe(1.5);
+  });
+
+  it('does not let brief_count exceed select_count', () => {
+    const raw = minimalRawConfig();
+    raw.news = { select_count: 8 };
+    expectConfigError(raw, 'news.brief_count 不能大于 news.select_count');
+    raw.news = { select_count: 8, brief_count: 8 };
+    expect(parseConfig(raw).news.brief_count).toBe(8);
   });
 
   it('validates the timezone', () => {

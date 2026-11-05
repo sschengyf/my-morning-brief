@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { recordingLogger } from '../../test/helpers.js';
 import type { Location } from '#/location/effective.js';
 import type { NewsItem, NumberedNews } from '#/sources/news/types.js';
-import { BRIEF_PROMPT } from './prompts.js';
+import { BRIEF_PROMPT, SELECT_PROMPT } from './prompts.js';
 import { type BriefData, estimateTokens, LlmService } from './service.js';
 import type { LlmClient } from './types.js';
 
@@ -95,6 +95,32 @@ describe('LlmService', () => {
     expect(result.news.length).toBeLessThan(10);
     expect(result.news.at(-1)?.id).toBe(`N${result.news.length}`);
     expect(logger.warnings[0]).toMatch(/超过 num_ctx（4096）的 75%，新闻从 10 条减到 \d 条/);
+  });
+
+  it('picks news with the selection prompt and its own timeout, returning candidate numbers', async () => {
+    const options: unknown[] = [];
+    const calls: Parameters<LlmClient['chat']>[0][] = [];
+    const client: LlmClient = {
+      chat: async (messages, chatOptions) => {
+        calls.push(messages);
+        options.push(chatOptions);
+        return '<think>…</think>C2,C1';
+      },
+    };
+    const service = new LlmService(client, 16384);
+    const picks = await service.pickNews({
+      candidates: [newsItem(1), newsItem(2)],
+      count: 1,
+      interests: [],
+      avoid: [],
+      timeoutSeconds: 120,
+    });
+
+    expect(picks).toEqual([2, 1]);
+    expect(options).toEqual([{ timeoutSeconds: 120 }]);
+    expect(calls[0]?.[0]).toEqual({ role: 'system', content: SELECT_PROMPT });
+    expect(calls[0]?.[1]?.content).toContain('[C2] 来源 RNZ｜Story 2');
+    expect(calls[0]?.[1]?.content).not.toMatch(/Summary|https?:/);
   });
 
   it('answers with the context, history and question, cleaning the reply', async () => {

@@ -38,7 +38,8 @@ ics_urls = []   # 可以填多个；webcal:// 自动转成 https://
 [news]
 max_items_per_feed = 10
 max_age_hours = 48     # 只要最近多少小时内发布的条目；没有发布时间的条目保留
-select_count = 10      # 交给早报的新闻条数上限
+select_count = 40      # 候选池：按源轮流挑出这么多条交给模型筛选；源多时调大，让每个源都有机会
+brief_count = 10       # 早报里写几条新闻，由模型从候选池里挑；不能大于 select_count
 dedup_days = 3         # 最近几天的早报里已经用过的新闻不再出现；0 表示不去重
 feeds = [
   "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml",
@@ -46,10 +47,9 @@ feeds = [
   "https://hnrss.org/frontpage?points=200",
   "https://karpathy.bearblog.dev/feed/",   # Andrej Karpathy 的博客（Atom 格式）
 ]
-# 以下三项在第二批（阶段 8）才生效，第一批会读取并校验，但不使用
-interests = []                # 感兴趣的话题，例如 ["新西兰本地政策", "AI 和开发工具", "奥克兰交通"]
-avoid = []                    # 不想看的话题，例如 ["体育", "名人八卦"]
-select_timeout_seconds = 120  # 模型筛选新闻的超时，超时直接走按源轮流
+interests = []                # 感兴趣的话题，模型挑新闻时优先选，例如 ["新西兰本地政策", "AI 和开发工具", "奥克兰交通"]
+avoid = []                    # 不想看的话题，除非是大新闻否则不选，例如 ["体育", "名人八卦"]
+select_timeout_seconds = 120  # 模型筛选新闻的超时，超时或失败就用按源轮流的前 brief_count 条
 
 [todo]
 file = "todo.md"   # 相对路径按 data_dir 解析，支持 ~ 和绝对路径

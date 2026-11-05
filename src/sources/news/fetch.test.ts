@@ -23,7 +23,7 @@ function rss(items: string[]): string {
 describe('fetchNews', () => {
   it('reads RSS items with source, link, date and summary', async () => {
     const result = await fetchNews(
-      ['https://rnz.test/rss'],
+      [{ url: 'https://rnz.test/rss' }],
       OPTIONS,
       CAPTURED,
       feedFetch({ 'https://rnz.test/rss': 'rnz.xml' }),
@@ -31,6 +31,7 @@ describe('fetchNews', () => {
     expect(result.items).toHaveLength(10);
     expect(result.items[0]).toEqual({
       source: 'RNZ New Zealand Headlines',
+      feed: 'https://rnz.test/rss',
       title:
         'Gisborne District Council unfairly criticised for forestry regulation handling - land use group',
       link: 'https://www.rnz.co.nz/news/regions_gisborne/2306247/gisborne-district-council-unfairly-criticised-for-forestry-regulation-handling-land-use-group',
@@ -42,7 +43,7 @@ describe('fetchNews', () => {
 
   it('drops hnrss metadata and marks link-only items as title only', async () => {
     const { items } = await fetchNews(
-      ['https://hn.test/rss'],
+      [{ url: 'https://hn.test/rss' }],
       OPTIONS,
       CAPTURED,
       feedFetch({ 'https://hn.test/rss': 'hnrss.xml' }),
@@ -59,7 +60,7 @@ describe('fetchNews', () => {
     const files = { 'https://kp.test/feed': 'karpathy.xml' };
     // HackerTube was published 2026-10-31T17:00Z, 49 hours before the capture.
     const atCapture = await fetchNews(
-      ['https://kp.test/feed'],
+      [{ url: 'https://kp.test/feed' }],
       OPTIONS,
       CAPTURED,
       feedFetch(files),
@@ -68,7 +69,7 @@ describe('fetchNews', () => {
     expect(atCapture.tooOld.map((item) => item.title)).toContain('HackerTube');
 
     const dayEarlier = await fetchNews(
-      ['https://kp.test/feed'],
+      [{ url: 'https://kp.test/feed' }],
       OPTIONS,
       CAPTURED.minus({ days: 1 }),
       feedFetch(files),
@@ -86,13 +87,18 @@ describe('fetchNews', () => {
       async () =>
         new Response(rss(['<item><title>Undated</title><link>https://a.test/1</link></item>'])),
     );
-    const { items } = await fetchNews(['https://a.test/rss'], OPTIONS, CAPTURED, fetchMock);
+    const { items } = await fetchNews(
+      [{ url: 'https://a.test/rss' }],
+      OPTIONS,
+      CAPTURED,
+      fetchMock,
+    );
     expect(items).toMatchObject([{ title: 'Undated', publishedAt: null, titleOnly: true }]);
   });
 
   it('takes at most max_items_per_feed from each feed', async () => {
     const { items } = await fetchNews(
-      ['https://rnz.test/rss'],
+      [{ url: 'https://rnz.test/rss' }],
       { ...OPTIONS, maxItemsPerFeed: 3 },
       CAPTURED,
       feedFetch({ 'https://rnz.test/rss': 'rnz.xml' }),
@@ -102,7 +108,7 @@ describe('fetchNews', () => {
 
   it('strips tracking parameters from links (BBC adds at_medium and at_campaign)', async () => {
     const { items } = await fetchNews(
-      ['https://bbc.test/rss'],
+      [{ url: 'https://bbc.test/rss' }],
       OPTIONS,
       CAPTURED,
       feedFetch({ 'https://bbc.test/rss': 'bbc-zhongwen.xml' }),
@@ -115,7 +121,7 @@ describe('fetchNews', () => {
     // HN links to Karpathy's post, which his own feed also lists (with a trailing slash).
     const files = { 'https://hn.test/rss': 'hnrss.xml', 'https://kp.test/feed': 'karpathy.xml' };
     const { items } = await fetchNews(
-      Object.keys(files),
+      Object.keys(files).map((url) => ({ url })),
       OPTIONS,
       CAPTURED.minus({ days: 1 }),
       feedFetch(files),
@@ -127,9 +133,23 @@ describe('fetchNews', () => {
     expect(copies[0]?.source).toBe('Hacker News: Front Page');
   });
 
+  it('shows a configured name instead of the feed title, also when the feed fails', async () => {
+    const result = await fetchNews(
+      [
+        { url: 'https://rnz.test/rss', name: 'RNZ' },
+        { url: 'https://broken.test/rss', name: 'Broken News' },
+      ],
+      OPTIONS,
+      CAPTURED,
+      feedFetch({ 'https://rnz.test/rss': 'rnz.xml' }),
+    );
+    expect(new Set(result.items.map((item) => item.source))).toEqual(new Set(['RNZ']));
+    expect(result.failures).toEqual([{ source: 'Broken News', reason: 'HTTP 500' }]);
+  });
+
   it('reports a failing feed by host name while the others still work', async () => {
     const result = await fetchNews(
-      ['https://rnz.test/rss', 'https://broken.test/rss'],
+      [{ url: 'https://rnz.test/rss' }, { url: 'https://broken.test/rss' }],
       OPTIONS,
       CAPTURED,
       feedFetch({ 'https://rnz.test/rss': 'rnz.xml' }),
@@ -141,7 +161,7 @@ describe('fetchNews', () => {
 
   it('is not ok when every feed fails, including on unparseable XML', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response('<html>not a feed'));
-    const result = await fetchNews(['https://a.test/rss'], OPTIONS, CAPTURED, fetchMock);
+    const result = await fetchNews([{ url: 'https://a.test/rss' }], OPTIONS, CAPTURED, fetchMock);
     expect(result.ok).toBe(false);
     expect(result.failures).toHaveLength(1);
   });

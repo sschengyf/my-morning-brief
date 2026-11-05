@@ -41,10 +41,12 @@ max_age_hours = 48     # 只要最近多少小时内发布的条目；没有发�
 select_count = 40      # 候选池：按源轮流挑出这么多条交给模型筛选；源多时调大，让每个源都有机会
 brief_count = 10       # 早报里写几条新闻，由模型从候选池里挑；不能大于 select_count
 dedup_days = 3         # 最近几天的早报里已经用过的新闻不再出现；0 表示不去重
+# 每项可以只写地址（早报里的来源用 feed 自己的标题），也可以写成 { url = "…", name = "短名" }。
+# 名字不要写成域名的样子（interest.co.nz 写成 interest）；几个源可以用同一个名字。
 feeds = [
-  "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml",
-  "https://www.rnz.co.nz/rss/national.xml",
-  "https://hnrss.org/frontpage?points=200",
+  { url = "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml", name = "BBC 中文" },
+  { url = "https://www.rnz.co.nz/rss/national.xml", name = "RNZ" },
+  { url = "https://hnrss.org/frontpage?points=200", name = "Hacker News" },
   "https://karpathy.bearblog.dev/feed/",   # Andrej Karpathy 的博客（Atom 格式）
 ]
 interests = []                # 感兴趣的话题，模型挑新闻时优先选，例如 ["新西兰本地政策", "AI 和开发工具", "奥克兰交通"]

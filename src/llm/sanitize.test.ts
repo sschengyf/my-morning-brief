@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { NewsItem, NumberedNews } from '#/sources/news/types.js';
-import { sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
+import { sanitizeBrief, sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
 
 function newsItem(id: number, overrides: Partial<NewsItem> = {}): NewsItem {
   return {
     source: 'RNZ',
+    feed: 'https://rnz.test/rss',
     title: `Story ${id}`,
     link: `https://rnz.test/${id}`,
     publishedAt: null,
@@ -51,6 +52,53 @@ describe('output cleanup', () => {
   it('keeps ordinary text such as versions and file names', () => {
     expect(sanitizeOutput('Node.js 24 和 Postgres 19.1 发布，见 config.toml')).toBe(
       'Node.js 24 和 Postgres 19.1 发布，见 config.toml',
+    );
+  });
+});
+
+describe('sanitizeBrief', () => {
+  const news: NumberedNews[] = [
+    { ...newsItem(1), id: 'N1', source: 'Latest stories from interest.co.nz' },
+    { ...newsItem(2), id: 'N2', source: 'CNBC' },
+  ];
+
+  it('starts each news line with its source, after the list mark', () => {
+    const brief = [
+      '今天有雨，记得带伞。',
+      '',
+      '📰 新闻：',
+      '- 国债招标结果 | 第 1016 次招标 [N1]',
+      '2. 民主党拿下国会 [N2]',
+      '没有列表符号的一条 [N2]',
+    ].join('\n');
+    expect(sanitizeBrief(brief, news)).toBe(
+      [
+        '今天有雨，记得带伞。',
+        '',
+        '📰 新闻：',
+        // Added after cleanup, so the domain in the feed title is kept.
+        '- Latest stories from interest.co.nz | 国债招标结果 | 第 1016 次招标 [原文](https://rnz.test/1)',
+        '2. CNBC | 民主党拿下国会 [原文](https://rnz.test/2)',
+        'CNBC | 没有列表符号的一条 [原文](https://rnz.test/2)',
+      ].join('\n'),
+    );
+  });
+
+  it('uses the first id’s source and leaves lines without known ids alone', () => {
+    expect(sanitizeBrief('- 两条合写 [N2] [N1]\n- 编造的 [N9]', news)).toBe(
+      '- CNBC | 两条合写 [原文](https://rnz.test/2) [原文](https://rnz.test/1)\n- 编造的',
+    );
+  });
+
+  it('does not repeat a source the model already wrote', () => {
+    expect(sanitizeBrief('- CNBC | 民主党拿下国会 [N2]', news)).toBe(
+      '- CNBC | 民主党拿下国会 [原文](https://rnz.test/2)',
+    );
+  });
+
+  it('still removes links the model wrote', () => {
+    expect(sanitizeBrief('- 详见 evil.test.com/login 和 https://evil.test [N2]', news)).toBe(
+      '- CNBC | 详见 和 [原文](https://rnz.test/2)',
     );
   });
 });

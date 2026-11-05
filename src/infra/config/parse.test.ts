@@ -118,6 +118,25 @@ describe('parseConfig', () => {
     expect(parseConfig(raw).brief.catch_up_hours).toBe(1.5);
   });
 
+  it('accepts feeds as URLs or as { url, name }, mixed', () => {
+    const raw = minimalRawConfig();
+    raw.news = {
+      feeds: ['https://rnz.test/rss', { url: 'https://cnbc.test/rss', name: ' CNBC ' }],
+    };
+    expect(parseConfig(raw).news.feeds).toEqual([
+      { url: 'https://rnz.test/rss' },
+      { url: 'https://cnbc.test/rss', name: 'CNBC' },
+    ]);
+  });
+
+  it('checks feed URLs and rejects names that look like domains', () => {
+    const raw = minimalRawConfig();
+    raw.news = { feeds: [{ url: 'not a url', name: 'X' }] };
+    expectConfigError(raw, 'news.feeds.0');
+    raw.news = { feeds: [{ url: 'https://interest.test/rss', name: 'interest.co.nz' }] };
+    expectConfigError(raw, 'news.feeds.0.name 不要写成域名的样子');
+  });
+
   it('does not let brief_count exceed select_count', () => {
     const raw = minimalRawConfig();
     raw.news = { select_count: 8 };

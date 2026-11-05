@@ -6,6 +6,7 @@ describe('formatNews', () => {
     const items = numberNews([
       {
         source: 'RNZ',
+        feed: 'https://rnz.test/rss',
         title: 'Story',
         link: 'https://rnz.test/1',
         publishedAt: null,
@@ -14,6 +15,7 @@ describe('formatNews', () => {
       },
       {
         source: 'HN',
+        feed: 'https://hn.test/rss',
         title: 'WTF Ubuntu?',
         link: 'https://hn.test/2',
         publishedAt: null,

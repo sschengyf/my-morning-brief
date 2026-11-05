@@ -50,6 +50,7 @@ const fakeGeocoding: typeof fetch = async (input) => {
 function item(n: number): NewsItem {
   return {
     source: 'RNZ',
+    feed: 'https://rnz.test/rss',
     title: `Story ${n}`,
     link: `https://rnz.test/${n}`,
     publishedAt: null,
@@ -166,7 +167,7 @@ describe('ChatCore commands', () => {
 
   it('sends /brief to the asker and archives it as manual', async () => {
     const { send, archive, counts } = await setup();
-    expect(await send('/brief')).toEqual(['好的 [原文](https://rnz.test/2)']);
+    expect(await send('/brief')).toEqual(['RNZ | 好的 [原文](https://rnz.test/2)']);
     expect(counts.news).toBe(1);
     expect(await archive.readBrief('2026-11-03')).toMatchObject({ kind: 'manual' });
   });
@@ -183,7 +184,7 @@ describe('ChatCore commands', () => {
     advance({ days: 1 });
     expect((await send('/history'))[0]).toContain('最近有早报的日期：\n2026-11-03');
     expect(await send('/history 昨天')).toEqual([
-      '📜 11月3日 10:00 手动早报\n\n好的 [原文](https://rnz.test/2)',
+      '📜 11月3日 10:00 手动早报\n\nRNZ | 好的 [原文](https://rnz.test/2)',
     ]);
     expect(await send('/history 10-01')).toEqual(['2026-10-01 没有归档的早报']);
     expect(await send('/history someday')).toEqual([
@@ -415,7 +416,7 @@ describe('ChatCore chat', () => {
     const chat = requests[1]!;
     expect(chat[0]!.content).toContain('[N2] 来源 RNZ｜Story 2｜Summary 2');
     // The brief opens the conversation, with ids rather than links.
-    expect(chat[1]).toEqual({ role: 'assistant', content: '早报 [N1] [N2]' });
+    expect(chat[1]).toEqual({ role: 'assistant', content: 'RNZ | 早报 [N1] [N2]' });
     expect(chat.at(-1)).toEqual({ role: 'user', content: '第二条展开讲讲' });
   });
 
@@ -435,7 +436,7 @@ describe('ChatCore chat', () => {
     await second.send('第二条呢');
     const chat = second.requests[0]!;
     expect(chat[0]!.content).toContain('[N2] 来源 RNZ｜Story 2');
-    expect(chat[1]).toEqual({ role: 'assistant', content: '早报 [N2]' });
+    expect(chat[1]).toEqual({ role: 'assistant', content: 'RNZ | 早报 [N2]' });
   });
 
   it('switches to a newer brief that another process archived today', async () => {
@@ -455,7 +456,7 @@ describe('ChatCore chat', () => {
     );
     second.advance({ hours: 1 });
     await second.send('早报说了什么');
-    expect(second.requests[1]![1]).toEqual({ role: 'assistant', content: '外面的早报 [N1]' });
+    expect(second.requests[1]![1]).toEqual({ role: 'assistant', content: 'RNZ | 外面的早报 [N1]' });
   });
 
   it('starts afresh after midnight, before the new day’s brief', async () => {
@@ -565,7 +566,7 @@ describe('ChatCore chat', () => {
     release();
     await Promise.all([brief, question]);
     expect(requests[1]![0]!.content).toContain('[N1] 来源 RNZ｜Story 1');
-    expect(requests[1]![1]).toEqual({ role: 'assistant', content: '早报 [N1]' });
+    expect(requests[1]![1]).toEqual({ role: 'assistant', content: 'RNZ | 早报 [N1]' });
     expect(counts.news).toBe(1);
   });
 

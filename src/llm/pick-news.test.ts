@@ -5,6 +5,7 @@ import { formatPickInput, parsePicks, type PickRequest } from './pick-news.js';
 function item(n: number, overrides: Partial<NewsItem> = {}): NewsItem {
   return {
     source: 'RNZ',
+    feed: 'https://rnz.test/rss',
     title: `Story ${n}`,
     link: `https://rnz.test/${n}`,
     publishedAt: null,

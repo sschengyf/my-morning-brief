@@ -19,6 +19,7 @@ const TUESDAY = DateTime.fromISO('2026-11-02T19:00:00Z');
 function item(n: number): NewsItem {
   return {
     source: 'RNZ',
+    feed: 'https://rnz.test/rss',
     title: `Story ${n}`,
     link: `https://rnz.test/${n}`,
     publishedAt: null,
@@ -94,12 +95,12 @@ describe('runBrief', () => {
       status: 'sent',
       date: '2026-11-03',
       generatedAt: '2026-11-03T08:00:00.000+13:00',
-      text: '今天晴，看看 [原文](https://rnz.test/2)',
+      text: 'RNZ | 今天晴，看看 [原文](https://rnz.test/2)',
       fallback: false,
       archived: true,
       sources: { weather: true, calendar: true, todos: true, news: true },
     });
-    expect(send).toHaveBeenCalledWith('今天晴，看看 [原文](https://rnz.test/2)');
+    expect(send).toHaveBeenCalledWith('RNZ | 今天晴，看看 [原文](https://rnz.test/2)');
     expect(result.input).toBe(calls[0]);
     expect(result.input).toContain('[N1] 来源 RNZ｜Story 1｜Summary 1');
     expect(result.news.map((n) => n.id)).toEqual(['N1', 'N2']);
@@ -142,7 +143,7 @@ describe('runBrief', () => {
       ['N1', 'Story 4'],
       ['N2', 'Story 2'],
     ]);
-    expect(result.text).toBe('今天晴，看看 [原文](https://rnz.test/2)');
+    expect(result.text).toBe('RNZ | 今天晴，看看 [原文](https://rnz.test/2)');
     const raw = await archive.readRaw('2026-11-03');
     expect(raw?.news).toMatchObject({ method: 'model', poolSize: 5, usedIds: ['N2'] });
   });
@@ -205,7 +206,7 @@ describe('runBrief', () => {
     const result = await runBrief({ kind: 'scheduled', send, archive: true }, deps);
     expect(result).toMatchObject({
       status: 'send_failed',
-      text: '今天晴，看看 [原文](https://rnz.test/2)',
+      text: 'RNZ | 今天晴，看看 [原文](https://rnz.test/2)',
       archived: true,
     });
     expect((result.error as Error).message).toBe('Telegram down');
@@ -228,7 +229,7 @@ describe('runBrief', () => {
     expect(calls).toEqual([]);
     expect(result).toMatchObject({ status: 'sent', fallback: true });
     expect(sent[0]).toMatch(/^⚠️ 本地模型暂时不可用/);
-    expect(sent[0]).toContain('1. Story 1 [原文](https://rnz.test/1)');
+    expect(sent[0]).toContain('- RNZ | Story 1 [原文](https://rnz.test/1)');
     expect(result.input).toContain('<数据 类型="新闻">');
     const raw = (await archive.readRaw('2026-11-03')) as ArchiveRaw;
     expect(raw.fallback).toBe(true);

@@ -7,6 +7,7 @@ import { candidatePool, type NewsSelectConfig, resolvePicks, selectNews } from '
 function item(source: string, n: number, hoursAgo: number | null = n): NewsItem {
   return {
     source,
+    feed: `https://${source.toLowerCase()}.test/rss`,
     title: `${source} ${n}`,
     link: `https://${source.toLowerCase()}.test/${n}`,
     publishedAt:
@@ -62,6 +63,20 @@ describe('candidatePool', () => {
     expect(titles(candidatePool([item('RNZ', 1, null), item('RNZ', 2, 5)], [], 10))).toEqual([
       'RNZ 2',
       'RNZ 1',
+    ]);
+  });
+
+  it('takes turns by feed, so feeds sharing a name do not share a turn', () => {
+    const scmp = (section: string, n: number): NewsItem => ({
+      ...item('SCMP', n),
+      feed: `https://scmp.test/${section}`,
+      link: `https://scmp.test/${section}/${n}`,
+    });
+    const candidates = [scmp('china', 1), scmp('china', 2), scmp('asia', 1), item('HN', 1)];
+    expect(candidatePool(candidates, [], 3).map((i) => i.link)).toEqual([
+      'https://scmp.test/china/1',
+      'https://scmp.test/asia/1',
+      'https://hn.test/1',
     ]);
   });
 

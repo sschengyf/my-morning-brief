@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanSummary, normalizeLink } from './clean.js';
+import { cleanSummary, normalizeLink, repeatsTitle } from './clean.js';
 
 describe('normalizeLink', () => {
   it('removes tracking parameters and trailing slashes', () => {
@@ -8,6 +8,26 @@ describe('normalizeLink', () => {
     );
     expect(normalizeLink('https://example.com/')).toBe('https://example.com');
     expect(normalizeLink(' not a url ')).toBe('not a url');
+  });
+});
+
+describe('repeatsTitle', () => {
+  it('spots a summary that only repeats the title, as Google News feeds do', () => {
+    const title = 'Breakingviews - COMMENTARY: COP31 will expose clean-energy tariffs - Reuters';
+    expect(
+      repeatsTitle(
+        'Breakingviews - COMMENTARY: COP31 will expose clean-energy tariffs Reuters',
+        title,
+      ),
+    ).toBe(true);
+    expect(repeatsTitle('Breakingviews - COMMENTARY: COP31 will expose', title)).toBe(true);
+  });
+
+  it('keeps real summaries', () => {
+    expect(
+      repeatsTitle('Police confirmed three people were assaulted.', 'School in lockdown'),
+    ).toBe(false);
+    expect(repeatsTitle('', 'School in lockdown')).toBe(false);
   });
 });
 

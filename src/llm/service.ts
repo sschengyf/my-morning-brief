@@ -10,7 +10,7 @@ import {
 } from '#/sources/index.js';
 import { formatPickInput, parsePicks, type PickRequest } from './pick-news.js';
 import { BRIEF_PROMPT, CHAT_PROMPT, SELECT_PROMPT } from './prompts.js';
-import { sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
+import { sanitizeBrief, sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
 import type { ChatMessage, LlmClient } from './types.js';
 
 export interface BriefData {
@@ -105,7 +105,7 @@ export class LlmService {
       ]);
       const text = stripThink(reply);
       return {
-        brief: sanitizeOutput(text, news),
+        brief: sanitizeBrief(text, news),
         input,
         news,
         usedIds: usedNewsIds(text, news),

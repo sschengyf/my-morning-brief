@@ -1,5 +1,14 @@
+export interface FeedSource {
+  url: string;
+  /** Shown instead of the feed's own title. */
+  name?: string;
+}
+
 export interface NewsItem {
+  /** The name shown for the feed: its configured name, else its title. */
   source: string;
+  /** The feed's URL; several feeds may share a name, so selection groups by this. */
+  feed: string;
   title: string;
   link: string;
   /** ISO date-time, or null when the feed gives none. */

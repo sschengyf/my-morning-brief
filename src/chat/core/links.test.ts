@@ -5,6 +5,7 @@ import { linksToIds } from './links.js';
 function item(n: number): NewsItem {
   return {
     source: 'RNZ',
+    feed: 'https://rnz.test/rss',
     title: `Story ${n}`,
     link: `https://rnz.test/${n}`,
     publishedAt: null,

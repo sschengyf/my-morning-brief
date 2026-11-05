@@ -1,5 +1,6 @@
 import { IANAZone } from 'luxon';
 import { z } from 'zod';
+import { looksLikeDomain } from '../text.js';
 
 export class ConfigError extends Error {
   override name = 'ConfigError';
@@ -14,6 +15,23 @@ const timezone = z
   .string()
   .refine((value) => IANAZone.isValidZone(value), '不是有效的 IANA 时区，例如 Pacific/Auckland');
 const positiveInt = z.number().int().positive();
+
+/** A feed URL, or { url, name } to show a short name instead of the feed's own title. */
+const feed = z.union([
+  z.url().transform((url) => ({ url })),
+  z.object({
+    url: z.url(),
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .refine(
+        (name) => !looksLikeDomain(name),
+        '不要写成域名的样子（会被输出清理删掉），例如把 interest.co.nz 写成 interest',
+      )
+      .optional(),
+  }),
+]);
 const nonNegativeInt = z.number().int().nonnegative();
 
 export const schema = z.object({
@@ -71,7 +89,7 @@ export const schema = z.object({
       select_count: positiveInt.default(40),
       brief_count: positiveInt.default(10),
       dedup_days: nonNegativeInt.default(3),
-      feeds: z.array(z.url()).default([]),
+      feeds: z.array(feed).default([]),
       interests: z.array(z.string().min(1)).default([]),
       avoid: z.array(z.string().min(1)).default([]),
       select_timeout_seconds: positiveInt.default(120),

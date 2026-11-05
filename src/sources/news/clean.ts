@@ -18,6 +18,18 @@ export function cleanSummary(text: string): string {
   return chars.length > SUMMARY_LENGTH ? `${chars.slice(0, SUMMARY_LENGTH).join('')}…` : cleaned;
 }
 
+/**
+ * Whether a summary only repeats the title. Google News feeds do this
+ * ("Breakingviews - X - Reuters" / "Breakingviews - X Reuters"), and the brief
+ * would show the title twice.
+ */
+export function repeatsTitle(summary: string, title: string): boolean {
+  const letters = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const s = letters(summary);
+  const t = letters(title);
+  return s !== '' && (s === t || t.startsWith(s));
+}
+
 /** Removes tracking parameters and a trailing slash, so the same article dedupes across days and feeds. */
 export function normalizeLink(link: string): string {
   let url: URL;

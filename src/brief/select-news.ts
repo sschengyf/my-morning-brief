@@ -82,16 +82,17 @@ export function candidatePool(
   size: number,
 ): NewsItem[] {
   const excluded = new Set(excludeLinks);
-  const bySource = new Map<string, NewsItem[]>();
+  // By feed, not by the name shown: several feeds may share a name (SCMP sections).
+  const byFeed = new Map<string, NewsItem[]>();
   for (const item of candidates) {
     if (excluded.has(item.link)) continue;
-    const queue = bySource.get(item.source) ?? [];
+    const queue = byFeed.get(item.feed) ?? [];
     queue.push(item);
-    bySource.set(item.source, queue);
+    byFeed.set(item.feed, queue);
   }
 
-  // Sources keep their feed order from config; undated items go last.
-  const queues = [...bySource.values()].map((items) =>
+  // Feeds keep their order from config; undated items go last.
+  const queues = [...byFeed.values()].map((items) =>
     [...items].sort((a, b) => timestamp(b) - timestamp(a)),
   );
 

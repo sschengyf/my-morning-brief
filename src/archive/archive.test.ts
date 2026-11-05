@@ -7,7 +7,16 @@ import { Archive } from './archive.js';
 import type { ArchiveEntry, ArchiveRaw, BriefKind } from './types.js';
 
 function news(id: string, link: string): NumberedNews {
-  return { id, source: 'RNZ', title: id, link, publishedAt: null, summary: '', titleOnly: true };
+  return {
+    id,
+    source: 'RNZ',
+    feed: 'https://rnz.test/rss',
+    title: id,
+    link,
+    publishedAt: null,
+    summary: '',
+    titleOnly: true,
+  };
 }
 
 function entry(

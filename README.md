@@ -177,7 +177,7 @@ curl -sL --compressed https://www.rnz.co.nz/rss/national.xml | head -20
 能看到 `<rss` 或 `<feed` 开头的 XML 就对了。
 
 - `max_age_hours`（默认 48）：只要最近多少小时发布的；没有发布时间的条目保留。
-- `select_count`（默认 10）：交给模型的新闻条数上限，按源轮流挑，一个源更新多也挤不掉别的源。模型再从里面挑 5 条写进早报。
+- `select_count`（默认 10）：交给模型的新闻条数上限，按源轮流挑，一个源更新多也挤不掉别的源。模型再从里面挑 10 条写进早报（挑法写在 `src/llm/prompts.ts`）。
 - `dedup_days`（默认 3）：最近几天早报里**实际写到**的新闻不再出现；同一天后面的早报也不重复前面的。
 - 想知道某天为什么是这几条：看那天的 `raw-*.json` 里的 `news`：`candidates` 是全部候选，`tooOld` 是太旧被过滤的，`dedupExcluded` 是因为最近用过被排除的，`selected` 是交给模型的，`usedIds` 是早报里实际写到的。
 

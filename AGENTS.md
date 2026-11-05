@@ -7,7 +7,7 @@ Working rules for AI coding agents (and people) on this repo. `PLAN.md` is the s
 - The user writes in Chinese. Reply in Chinese. Code, comments, commit messages and identifiers are in English; text the user sees in the app (bot replies, errors, logs) is in Chinese.
 - **Plan first.** `PLAN.md` describes every stage and its acceptance criteria. When a design changes, update `PLAN.md` before writing the code, and confirm design choices that are the user's to make. Details the plan leaves open: pick the simplest testable option and note it in README's 设计说明.
 - Work one stage at a time; a stage is done when its acceptance criteria pass.
-- **Commit only when asked.** End commit messages with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` (or your own attribution). Never commit `.vscode/` or anything in `data/`.
+- **Commit only when asked.** No `Co-Authored-By:` trailers or other attribution lines in commit messages. Never commit `.vscode/` or anything in `data/`.
 - Report honestly what was and was not verified (unit tests vs. a live run vs. tested by the user in Discord).
 - Do not pull Ollama models, or do anything else large or hard to undo, without asking.
 - Never print or ask the user to paste tokens, chat ids or calendar links. The user fills secrets into `config.toml` themselves.

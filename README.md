@@ -24,19 +24,29 @@
 
 ## 2. 配置文件
 
+每个人一个容器，共用 Mac 上的 Ollama；只有你一个人时也是这样，以后加人只要再加一个用户（第 16 节）。配置分两层：
+
+- `config.shared.toml`：所有人共用的设置，模型、默认的订阅源等；
+- `users/<名字>/`：每个人自己的 `config.toml`（家的位置、日历、兴趣）、`.env`（token 和用户 id）和 `data/`（这个人的待办、定时和历史早报）。
+
+个人配置里写的值优先（表逐键合并，数组整个替换）；`[ollama]` 只能写在共用配置里。这些文件都在 `.gitignore` 里。
+
 ```sh
-cp config.example.toml config.toml
+cp config.shared.example.toml config.shared.toml
+scripts/add-user.sh ivan        # 名字用小写字母、数字和 -
 ```
 
 至少要改：
 
-- `ollama.model`：和 `ollama list` 显示的名字一致，例如 `qwen3:32b`；
-- `[brief]` 里的 `timezone`、`city`、`latitude`、`longitude`：你“家”的位置；
-- 聊天渠道的 token 和 id：见第 3 步。
+- `config.shared.toml` 的 `ollama.model`：和 `ollama list` 显示的名字一致，例如 `qwen3:32b`；
+- `users/ivan/config.toml` 的 `[brief]`：`timezone`、`city`、`latitude`、`longitude`，你“家”的位置；
+- `users/ivan/.env`：聊天渠道的 token 和 id，见第 3 步。
 
-日历、新闻等其他设置见第 8、10 节，文件里每一项都有注释。`config.toml` 里有 token 和私密日历链接，已经在 `.gitignore` 里，不要发给别人。
+日历、新闻等其他设置见第 8、10 节，模板里每一项都有注释。`users/` 里有 token 和私密日历链接，不要发给别人。
 
-`ollama.host` 保持 `http://localhost:11434` 就行：在 Docker 里运行时，`compose.yaml` 用环境变量 `MORNING_BRIEF_OLLAMA_HOST` 把它换成 `http://host.docker.internal:11434`（容器访问 Mac 本机的地址）。
+`ollama.host` 保持 `http://localhost:11434` 就行：`compose.yaml` 用环境变量 `MORNING_BRIEF_OLLAMA_HOST` 把它换成 `http://host.docker.internal:11434`（容器访问 Mac 本机的地址）。
+
+不用 Docker、直接在本机跑（开发时 `pnpm start`、`pnpm brief:dry`）用的是单独一份 `config.toml`：`cp config.example.toml config.toml`，所有设置写在一起，数据在项目根目录的 `data/`。
 
 ## 3. 创建聊天机器人
 
@@ -46,21 +56,21 @@ Discord 和 Telegram 至少开一个；都开时早报两边都发，在哪边�
 
 1. 打开 <https://discord.com/developers/applications>，点 **New Application**，起个名字（例如“早报”）。
 2. 左边点 **Bot**：
-   - 点 **Reset Token**，复制 token，填进 `config.toml` 的 `discord.bot_token`。token 等于机器人的密码，不要发给别人；泄露了就再点一次 Reset Token。
+   - 点 **Reset Token**，复制 token，填进 `users/<名字>/.env` 的 `DISCORD_BOT_TOKEN`。token 等于机器人的密码，不要发给别人；泄露了就再点一次 Reset Token。
    - **Privileged Gateway Intents** 下面三个开关都不用开（私信内容不需要特权）。
 3. 左边点 **Installation**：**Installation Contexts** 只勾 **Guild Install**；**Install Link** 选 **Discord Provided Link**；**Default Install Settings** 的 Scopes 选 `bot` 和 `applications.commands`，Permissions 选 `Send Messages`。保存。
 4. 在 Discord 里自己建一个服务器（左边栏的“+”→ 亲自创建 → 仅供我和我的朋友使用），只有你一个人也可以。
 5. 复制第 3 步页面上的 Install Link，在浏览器打开，把机器人加到这个服务器。你和机器人要在同一个服务器里，它才能私信你。
-6. 确认 `config.toml` 里 `[discord]` 的 `enabled = true`，`user_id` 先留空。
+6. 确认 `users/<名字>/config.toml` 里 `[discord]` 的 `enabled = true`，`.env` 里的 `DISCORD_USER_ID` 先留空。
 
-`user_id` 在第 5 节启动后获取。
+用户 id 在第 5 节启动后获取。每个人要有自己的机器人，不能共用 token。
 
 ### Telegram（可选）
 
 > Telegram 适配有完整的单元测试，但还没有在真机上验证过。
 
-1. 在 Telegram 里找 **@BotFather**，发 `/newbot`，按提示起名字，拿到 token，填进 `telegram.bot_token`。
-2. `[telegram]` 里 `enabled = true`，`chat_id` 先留 `0`。
+1. 在 Telegram 里找 **@BotFather**，发 `/newbot`，按提示起名字，拿到 token，填进 `.env` 的 `TELEGRAM_BOT_TOKEN`。
+2. 个人配置的 `[telegram]` 里 `enabled = true`，`TELEGRAM_CHAT_ID` 先不填。
 
 `chat_id` 在第 5 节启动后获取。
 
@@ -69,9 +79,8 @@ Discord 和 Telegram 至少开一个；都开时早报两边都发，在哪边�
 不连聊天渠道，只在终端打印给模型的数据和生成的早报（不发送、不写归档）：
 
 ```sh
-pnpm brief:dry
-# 没装 Node 时用 Docker：
-docker compose run --rm morning-brief node --import tsx src/index.ts --dry
+docker compose build template                                     # 第一次和更新代码后构建镜像
+docker compose run --rm ivan node --import tsx src/index.ts --dry
 ```
 
 第一次生成要先把模型读进内存，可能要一两分钟；之后一份约 20–40 秒。看看天气、日程、待办对不对，新闻后面的“原文”链接能不能打开。
@@ -79,38 +88,39 @@ docker compose run --rm morning-brief node --import tsx src/index.ts --dry
 ## 5. 启动
 
 ```sh
-docker compose up -d --build
-docker compose logs -f        # 看日志，Ctrl-C 退出查看（程序继续运行）
+docker compose up -d          # 启动所有人
+docker compose logs -f ivan   # 看日志，Ctrl-C 退出查看（程序继续运行）
 ```
 
 日志里出现 `Discord 已连接` 就好了。然后获取你的 id：
 
-- **Discord**：在服务器成员列表里点机器人 → 发消息，随便发一句。它会回复你的用户 ID，填进 `discord.user_id`（要加引号）。
-- **Telegram**：给机器人发 `/start`，它会回复你的 chat_id，填进 `telegram.chat_id`。
+- **Discord**：在服务器成员列表里点机器人 → 发消息，随便发一句。它会回复你的用户 ID，填进 `users/ivan/.env` 的 `DISCORD_USER_ID`。
+- **Telegram**：给机器人发 `/start`，它会回复你的 chat_id，填进 `.env` 的 `TELEGRAM_CHAT_ID`。
 
 填好后：
 
 ```sh
-docker compose restart
+docker compose up -d ivan     # 改了 .env 要用 up -d 重建容器，restart 不会重新读 .env
 ```
 
 再给机器人发 `/help` 试试。Discord 里输入 `/` 会弹出命令菜单（第一次可能要等一会儿或重启 Discord 才出现）；直接打字发 `/todo` 这样的文字也可以。
 
-常用的 Docker 命令：
+常用的 Docker 命令（`ivan` 换成那个人的名字；不写名字就是所有人）：
 
-| 做什么                     | 命令                                                                      |
-| -------------------------- | ------------------------------------------------------------------------- |
-| 看日志                     | `docker compose logs -f --tail 100`                                       |
-| 改了 `config.toml` 之后    | `docker compose restart`                                                  |
-| 更新代码之后（`git pull`） | `docker compose up -d --build`                                            |
-| 停止（不再自动启动）       | `docker compose down`                                                     |
-| 立刻发一份早报到所有渠道   | `docker compose exec morning-brief node --import tsx src/index.ts --once` |
+| 做什么                       | 命令                                                             |
+| ---------------------------- | ---------------------------------------------------------------- |
+| 看日志                       | `docker compose logs -f --tail 100 ivan`                         |
+| 改了 `config.toml` 之后      | `docker compose restart ivan`（改共用配置就重启所有人）          |
+| 改了 `.env` 之后             | `docker compose up -d ivan`                                      |
+| 更新代码之后（`git pull`）   | `docker compose build template && docker compose up -d`          |
+| 停止（不再自动启动）         | `docker compose down`                                            |
+| 立刻发一份早报到这个人的渠道 | `docker compose exec ivan node --import tsx src/index.ts --once` |
 
-程序崩溃或 Docker Desktop 重启后，容器会自动重新运行（`restart: unless-stopped`）；`docker compose down` 之后要再 `up -d` 才会运行。日志最多保留约 30 MB，旧的自动删除。
+程序崩溃或 Docker Desktop 重启后，容器会自动重新运行（`restart: unless-stopped`）；`docker compose down` 之后要再 `up -d` 才会运行。每个人的日志最多保留约 30 MB，旧的自动删除。
 
 ## 6. 设置定时早报
 
-定时只在聊天里设置，不在 `config.toml` 里。第一次启动时 bot 会私信提醒你设置。
+定时只在聊天里设置，不在配置文件里。第一次启动时 bot 会私信提醒你设置。
 
 | 命令                  | 作用                                                                            |
 | --------------------- | ------------------------------------------------------------------------------- |
@@ -147,7 +157,7 @@ Mac 睡过了某个定时，醒来后在补发窗口（`catch_up_hours`）内仍
 - **Outlook / Microsoft 365**：网页版 Outlook → 设置 → 日历 → 共享日历 → “发布日历”，选日历和“可以查看所有详细信息”，点“发布”，复制 **ICS** 链接。
 - **iCloud**：Mac 上的“日历”App，右键日历 → “共享日历…” → 勾选“公开日历”，复制 `webcal://` 链接。注意“公开”的意思是任何拿到链接的人都能看。
 
-改完 `config.toml` 后 `docker compose restart`，用 `/refresh` 或 `pnpm brief:dry` 检查。
+日历链接写在个人配置 `users/<名字>/config.toml` 的 `ics_urls` 里，改完 `docker compose restart <名字>`，用 `/refresh` 检查。
 
 ## 9. 历史早报
 
@@ -215,29 +225,29 @@ Mac 留在家里无人照看时：
 
 ## 13. 常见问题
 
-- **日志说 `app.lock 属于另一台机器或容器`，或“另一个实例正在运行”**：同一个 `data/` 只能有一个程序在跑。通常是容器在运行时又在本机 `pnpm start`。停掉其中一个（`docker compose down` 或 Ctrl-C）。如果确认两边都已经停了，删掉 `data/app.lock` 再启动。`brief:dry` 和 `--once` 不受影响，可以和常驻的程序同时用。
+- **日志说 `app.lock 属于另一台机器或容器`，或“另一个实例正在运行”**：同一个数据目录只能有一个程序在跑。通常是两个服务挂了同一个 `users/<名字>/data/`，或者容器在运行时又在本机用同一个目录 `pnpm start`。停掉其中一个。如果确认都已经停了，删掉那个目录里的 `app.lock` 再启动。`brief:dry` 和 `--once` 不受影响，可以和常驻的程序同时用。
 - **Telegram 返回 409**：同一个 bot token 有两个程序在收消息，停掉一个。
 - **容器连不上 Ollama**：在 Mac 上运行 `curl http://localhost:11434/api/version`，没有返回就是 Ollama 没开；返回了就检查 `ollama.model` 和 `ollama list` 是否一致。
 - **早报内容不全或胡编**：检查 `ollama.num_ctx`。Ollama 默认上下文很短，输入超长时会悄悄截掉一部分；日志里有“超过 num_ctx 的 75%”时，调大 `num_ctx` 或减少 `select_count`。
-- **改了 `config.toml` 没生效**：要 `docker compose restart`。
+- **改了配置没生效**：改了 `config.toml` 或 `config.shared.toml` 要 `docker compose restart`；改了 `.env` 要 `docker compose up -d <名字>`。
 - **没收到定时早报**：先看 `/schedule` 有没有定时、`/where` 的下次时间对不对，再看 `docker compose logs` 里那个时间前后的记录。最常见的原因是 Mac 睡着了（见第 7 节）。
 
 ## 14. 隐私
 
 - 模型在你自己的 Mac 上运行，日程、待办不会发给任何模型服务商。
 - 但早报和对话内容会经过 Discord / Telegram 的服务器。
-- `data/` 里有日程、待办和早报的明文，`config.toml` 里有 token 和日历链接：不要放进同步盘，不要提交到 git（`.gitignore` 已经排除）。
+- `users/` 里有每个人的日程、待办和早报的明文，以及 token 和日历链接：不要放进同步盘，不要提交到 git（`.gitignore` 已经排除）。同一台 Mac 上的人，管理员能看到所有人的数据。
 
 ## 15. 数据和备份
 
-程序产生的所有数据都在 `data/`（`paths.data_dir`）里，每个文件的作用见 [`data/README.md`](data/README.md)。迁移时复制整个 `data/` 和 `config.toml` 即可。
+每个人的数据都在 `users/<名字>/data/`（容器里的 `/app/data`，`paths.data_dir` 的默认值），每个文件的作用见 [`data/README.md`](data/README.md)。迁移时复制 `config.shared.toml` 和整个 `users/` 即可。
 
-- **Mac 上**：Time Machine 会备份项目目录，包括 `data/`。
+- **Mac 上**：Time Machine 会备份项目目录，包括 `users/`。
 - **服务器上**：用云盘快照，或者每天用 `restic`（或 `rclone`）把 `data/` 加密备份到对象存储。例如 crontab：
 
   ```cron
   # 每天 03:00 加密备份，保留 30 天
-  0 3 * * * RESTIC_REPOSITORY=s3:https://s3.example.com/morning-brief RESTIC_PASSWORD_FILE=$HOME/.restic-pass restic backup /srv/morning-brief/data && RESTIC_REPOSITORY=s3:https://s3.example.com/morning-brief RESTIC_PASSWORD_FILE=$HOME/.restic-pass restic forget --keep-daily 30 --prune
+  0 3 * * * RESTIC_REPOSITORY=s3:https://s3.example.com/morning-brief RESTIC_PASSWORD_FILE=$HOME/.restic-pass restic backup /srv/morning-brief/users /srv/morning-brief/config.shared.toml && RESTIC_REPOSITORY=s3:https://s3.example.com/morning-brief RESTIC_PASSWORD_FILE=$HOME/.restic-pass restic forget --keep-daily 30 --prune
   ```
 
   里面有日程和待办等私人数据，备份一定要加密（restic 默认加密）。
@@ -246,27 +256,26 @@ Mac 留在家里无人照看时：
 
 ## 16. 多人使用
 
-一人一个容器，共用 Mac 上的同一个 Ollama。给第二个人加一个服务：
+一人一个容器，共用 Mac 上的同一个 Ollama。加一个人：
 
-1. 给他建一个自己的 Discord 机器人（每人一个 bot token，不能共用），复制一份配置，例如 `config.alice.toml`，建一个空目录 `data-alice/`。
-2. 在 `compose.yaml` 的 `services:` 下复制一份 `morning-brief`，改名字、`hostname` 和两个挂载：
+```sh
+scripts/add-user.sh alice
+```
 
-   ```yaml
-   alice:
-     image: morning-brief # 用同一个镜像，不需要再 build
-     hostname: morning-brief-alice
-     restart: unless-stopped
-     environment:
-       MORNING_BRIEF_OLLAMA_HOST: http://host.docker.internal:11434
-     volumes:
-       - ./config.alice.toml:/app/config.toml:ro
-       - ./data-alice:/app/data
-     stop_grace_period: 40s
-   ```
+它会建好 `users/alice/`（`config.toml`、`.env`、`data/`），在 `compose.override.yaml` 里加上 alice 的服务，并打印接下来的步骤：
 
-3. `docker compose up -d`。
+1. 给 alice 建一个**她自己的** Discord 机器人（第 3 步），token 填进 `users/alice/.env`。每个人要有自己的机器人：同一个 token 被两个容器登录时，每个容器都会收到所有人的私信。
+2. 改 `users/alice/config.toml`：家的城市和时区、日历、兴趣（`interests`、`avoid`），想多订几个源就写 `extra_feeds`。
+3. `docker compose up -d alice`，让 alice 私信机器人拿到用户 ID，填进 `.env` 后再 `docker compose up -d alice`。
+4. 让 alice 在聊天里设置定时，和别人错开几分钟：模型一次只处理一个请求，大家都在 08:00 时后面的人要排队（一份早报约一分钟）。
 
-注意：所有人用同一个模型名和相同的 `num_ctx`，否则 Ollama 会反复切换模型，非常慢；模型一次只处理一个请求，大家的定时最好错开几分钟。更多考虑见 PLAN.md 第 7 节“多用户部署”。
+其他：
+
+- 所有人共用 `config.shared.toml` 里的模型和 `num_ctx`，个人配置里不能写 `[ollama]`，否则 Ollama 会反复切换模型，非常慢。人多时调大 `timeout_seconds`，排队时间也算在里面。
+- 每个人的服务在 `compose.override.yaml` 里（不进 git，`docker compose` 自动读取），继承 `compose.yaml` 里的模板 `template`，只写名字、`hostname`、`.env` 和挂载。删掉一个人：`docker compose rm -sf alice`，再从 `compose.override.yaml` 删掉那一段，`users/alice/` 按需备份后删除。
+- 只操作某一个人：`docker compose restart alice`、`docker compose logs -f alice`。
+
+更多考虑见 PLAN.md 阶段 9 和第 7 节“多用户部署”。
 
 ## 设计说明
 

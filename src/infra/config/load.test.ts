@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { makeTempDir, recordingLogger } from '../../../test/helpers.js';
@@ -150,5 +150,101 @@ describe('loadConfig', () => {
     const path = join(dir, 'config.toml');
     await writeFile(path, '[telegram\n');
     await expect(loadConfig({ path, env: {} })).rejects.toThrow('不是有效的 TOML');
+  });
+
+  describe('with a shared config', () => {
+    const SHARED = [
+      '[ollama]',
+      'model = "qwen3:32b"',
+      'num_ctx = 16384',
+      '[news]',
+      'select_count = 40',
+      'feeds = ["https://rnz.test/rss", "https://bbc.test/rss"]',
+      '[archive]',
+      'retention_days = 30',
+    ].join('\n');
+    const PERSONAL = [
+      '[discord]',
+      'enabled = true',
+      '[brief]',
+      'city = "Wellington"',
+      '[news]',
+      'interests = ["AI"]',
+      'extra_feeds = [{ url = "https://hn.test/rss", name = "HN" }]',
+    ].join('\n');
+
+    async function files(shared: string, personal: string) {
+      const dir = await makeTempDir();
+      const sharedPath = join(dir, 'config.shared.toml');
+      const path = join(dir, 'config.toml');
+      await writeFile(sharedPath, shared);
+      await writeFile(path, personal);
+      return { sharedPath, path };
+    }
+
+    it('applies the personal config on top of the shared one, then the environment', async () => {
+      const { sharedPath, path } = await files(SHARED, PERSONAL);
+      const config = await loadConfig({
+        path,
+        env: {
+          MORNING_BRIEF_SHARED_CONFIG: sharedPath,
+          DISCORD_BOT_TOKEN: 'discord-token-from-env',
+          DISCORD_USER_ID: '123',
+        },
+      });
+      expect(config.ollama).toMatchObject({ model: 'qwen3:32b', num_ctx: 16384 });
+      expect(config.brief.city).toBe('Wellington');
+      expect(config.archive.retention_days).toBe(30);
+      expect(config.news).toMatchObject({ select_count: 40, interests: ['AI'] });
+      expect(config.news.feeds).toEqual([
+        { url: 'https://rnz.test/rss' },
+        { url: 'https://bbc.test/rss' },
+        { url: 'https://hn.test/rss', name: 'HN' },
+      ]);
+      expect(config.discord).toEqual({
+        enabled: true,
+        bot_token: 'discord-token-from-env',
+        user_id: '123',
+      });
+    });
+
+    it('accepts the shipped shared and personal templates together', async () => {
+      const read = (name: string) => readFile(join(PROJECT_ROOT, name), 'utf8');
+      const { sharedPath, path } = await files(
+        (await read('config.shared.example.toml')).replace('填你的模型名', 'qwen3:32b'),
+        await read('config.user.example.toml'),
+      );
+      const config = await loadConfig({
+        path,
+        env: { MORNING_BRIEF_SHARED_CONFIG: sharedPath, DISCORD_BOT_TOKEN: 'discord-token' },
+      });
+      expect(config.discord.enabled).toBe(true);
+      expect(config.news.feeds).toHaveLength(3);
+      expect(config.brief.timezone).toBe('Pacific/Auckland');
+    });
+
+    it('refuses [ollama] in the personal config', async () => {
+      const { sharedPath, path } = await files(SHARED, `${PERSONAL}\n[ollama]\nnum_ctx = 8192`);
+      await expect(
+        loadConfig({ path, env: { MORNING_BRIEF_SHARED_CONFIG: sharedPath } }),
+      ).rejects.toThrow('个人配置 ' + path + ' 里不能写 [ollama]');
+    });
+
+    it('validates the merged config and names both files', async () => {
+      const { sharedPath, path } = await files(SHARED, `${PERSONAL}\nbrief_count = 41`);
+      const load = loadConfig({
+        path,
+        env: { MORNING_BRIEF_SHARED_CONFIG: sharedPath, DISCORD_BOT_TOKEN: 'discord-token' },
+      });
+      await expect(load).rejects.toThrow('news.brief_count 不能大于 news.select_count');
+      await expect(load).rejects.toThrow(`（共用配置 ${sharedPath}，个人配置 ${path}）`);
+    });
+
+    it('says which template to copy when a file is missing', async () => {
+      const { path } = await files(SHARED, PERSONAL);
+      await expect(
+        loadConfig({ path, env: { MORNING_BRIEF_SHARED_CONFIG: join(path, '..', 'none.toml') } }),
+      ).rejects.toThrow('请先复制 config.shared.example.toml 为 config.shared.toml');
+    });
   });
 });

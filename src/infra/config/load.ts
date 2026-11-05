@@ -3,12 +3,17 @@ import { join, resolve } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { isNotFound } from '../fs.js';
 import { logger as defaultLogger, type Logger } from '../logger.js';
+import { mergeConfig } from './merge.js';
 import { parseConfig } from './parse.js';
 import { PROJECT_ROOT } from './paths.js';
 import { type Config, ConfigError } from './schema.js';
 
 export interface LoadConfigOptions {
-  /** Defaults to MORNING_BRIEF_CONFIG, then config.toml in the project root. */
+  /**
+   * Defaults to MORNING_BRIEF_CONFIG, then config.toml in the project root.
+   * With MORNING_BRIEF_SHARED_CONFIG set, this is the person's own config,
+   * applied on top of the shared one.
+   */
   path?: string;
   env?: NodeJS.ProcessEnv;
   /**
@@ -38,30 +43,53 @@ function warnRetired(raw: Record<string, unknown>, logger: Logger): void {
 
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<Config> {
   const env = options.env ?? process.env;
+  const logger = options.logger ?? defaultLogger;
   const path = resolve(
     PROJECT_ROOT,
     options.path ?? env.MORNING_BRIEF_CONFIG ?? join(PROJECT_ROOT, 'config.toml'),
   );
 
+  if (!env.MORNING_BRIEF_SHARED_CONFIG) {
+    const raw = await readToml(path, '请先复制 config.example.toml 为 config.toml');
+    warnRetired(raw, logger);
+    return parseConfig(applyEnvOverrides(raw, env), options);
+  }
+
+  const sharedPath = resolve(PROJECT_ROOT, env.MORNING_BRIEF_SHARED_CONFIG);
+  const shared = await readToml(
+    sharedPath,
+    '请先复制 config.shared.example.toml 为 config.shared.toml',
+  );
+  const personal = await readToml(path, '请先复制 config.user.example.toml 为个人配置');
+  if ('ollama' in personal) {
+    // Every container must ask Ollama for the same model and num_ctx, or it keeps reloading.
+    throw new ConfigError(
+      `个人配置 ${path} 里不能写 [ollama]：所有人必须用同一个模型和 num_ctx，请写在共用配置 ${sharedPath} 里`,
+    );
+  }
+  warnRetired(shared, logger);
+  warnRetired(personal, logger);
+  try {
+    return parseConfig(applyEnvOverrides(mergeConfig(shared, personal), env), options);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    throw new ConfigError(`${error.message}\n（共用配置 ${sharedPath}，个人配置 ${path}）`);
+  }
+}
+
+async function readToml(path: string, hint: string): Promise<Record<string, unknown>> {
   let text: string;
   try {
     text = await readFile(path, 'utf8');
   } catch (error) {
-    if (isNotFound(error)) {
-      throw new ConfigError(`找不到配置文件 ${path}，请先复制 config.example.toml 为 config.toml`);
-    }
+    if (isNotFound(error)) throw new ConfigError(`找不到配置文件 ${path}，${hint}`);
     throw error;
   }
-
-  let raw: Record<string, unknown>;
   try {
-    raw = parseToml(text) as Record<string, unknown>;
+    return parseToml(text) as Record<string, unknown>;
   } catch (error) {
     throw new ConfigError(`配置文件 ${path} 不是有效的 TOML：${(error as Error).message}`);
   }
-
-  warnRetired(raw, options.logger ?? defaultLogger);
-  return parseConfig(applyEnvOverrides(raw, env), options);
 }
 
 function applyEnvOverrides(raw: Record<string, unknown>, env: NodeJS.ProcessEnv) {

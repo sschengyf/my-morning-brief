@@ -2,6 +2,10 @@
 **/node_modules
 /data
 /config.toml
+/config.shared.toml
+/users
+/compose.override.yaml
+/scripts
 /archive
 /state.json
 /location.json

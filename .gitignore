@@ -3,6 +3,10 @@ node_modules/
 # Personal data and secrets: token, private calendar links, location, schedule, todos.
 # Anchored to the root, so source folders like src/archive/ are not caught.
 /config.toml
+# Multi-user deployment: shared config, everyone's config, secrets and data.
+/config.shared.toml
+/users/
+/compose.override.yaml
 # The data/ folder itself is kept (with its README); everything in it is ignored.
 /data/*
 !/data/README.md

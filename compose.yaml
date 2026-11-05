@@ -1,18 +1,20 @@
-# One person's bot. For a second person, copy the service with its own name,
-# hostname, config file and data folder (README: 多人使用).
+# Each person runs in their own container, all sharing one Ollama on the Mac.
+# This file only holds the settings they share; scripts/add-user.sh adds a
+# service per person to compose.override.yaml (gitignored, read automatically),
+# which extends `template`. Build the image with `docker compose build template`.
 services:
-  morning-brief:
+  template:
+    # Never started itself; people's services reset this.
+    profiles: [template]
     build: .
     image: morning-brief
-    # Fixed so a restarted or rebuilt container recognises its own app.lock.
-    hostname: morning-brief
     restart: unless-stopped
     environment:
       # Ollama runs on the Mac itself (Docker Desktop has no Metal GPU).
       MORNING_BRIEF_OLLAMA_HOST: http://host.docker.internal:11434
+      MORNING_BRIEF_SHARED_CONFIG: /app/config.shared.toml
     volumes:
-      - ./config.toml:/app/config.toml:ro
-      - ./data:/app/data
+      - ./config.shared.toml:/app/config.shared.toml:ro
     # The program waits up to 30 s for a brief in progress; Docker's default is 10 s.
     stop_grace_period: 40s
     logging:

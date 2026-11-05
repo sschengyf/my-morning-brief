@@ -90,14 +90,17 @@ export const schema = z.object({
       brief_count: positiveInt.optional(),
       dedup_days: nonNegativeInt.default(3),
       feeds: z.array(feed).default([]),
+      // A person's feeds on top of the shared ones.
+      extra_feeds: z.array(feed).default([]),
       interests: z.array(z.string().min(1)).default([]),
       avoid: z.array(z.string().min(1)).default([]),
       select_timeout_seconds: positiveInt.default(120),
     })
     // Unset, it is 10 but never more than select_count, so older configs with a
     // small select_count still start.
-    .transform(({ brief_count, ...news }) => ({
+    .transform(({ brief_count, extra_feeds, ...news }) => ({
       ...news,
+      feeds: [...news.feeds, ...extra_feeds],
       brief_count: brief_count ?? Math.min(10, news.select_count),
     }))
     .refine((news) => news.brief_count <= news.select_count, {

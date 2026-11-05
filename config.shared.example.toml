@@ -1,0 +1,33 @@
+# 多人部署的共用配置：复制为 config.shared.toml。每个人的个人配置在 users/<名字>/config.toml，
+# 写在个人配置里的值优先（表逐键合并，数组整个替换）。[ollama] 只能写在这里。
+
+[ollama]
+host = "http://localhost:11434"   # 容器里由 compose 的 MORNING_BRIEF_OLLAMA_HOST 覆盖
+model = "填你的模型名"   # 和 `ollama list` 显示的名字一致，例如 qwen3:32b；所有人共用，Ollama 才不会反复切换模型
+temperature = 0.3
+think = false
+timeout_seconds = 600   # 人多时请求会在 Ollama 排队，排队时间也算在里面，人多就调大
+num_ctx = 16384
+keep_alive = "30m"
+
+[brief]
+weekend_news = true
+catch_up_hours = 4
+retry_minutes = [2, 5, 10]
+
+[news]
+max_items_per_feed = 10
+max_age_hours = 48
+select_count = 40
+brief_count = 10
+dedup_days = 3
+select_timeout_seconds = 120
+# 所有人默认的订阅源；个人配置里用 extra_feeds 追加，写 feeds 则整个替换
+feeds = [
+  { url = "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml", name = "BBC 中文" },
+  { url = "https://www.rnz.co.nz/rss/national.xml", name = "RNZ" },
+  { url = "https://hnrss.org/frontpage?points=200", name = "Hacker News" },
+]
+
+[archive]
+retention_days = 90

@@ -22,7 +22,7 @@ pnpm lint        # eslint (including module boundaries) + prettier --check
 pnpm typecheck
 ```
 
-After changing dependencies, `Dockerfile` or `compose.yaml`, also run `docker compose build` and check the container starts (`docker compose up -d`, `docker compose logs`).
+After changing dependencies, `Dockerfile` or `compose.yaml`, also run `docker compose build template` and check the containers start (`docker compose up -d`, `docker compose logs <name>`). Each person's service lives in the gitignored `compose.override.yaml` (see README section 16).
 
 For anything touching data sources, the model or prompts, also run `pnpm brief:dry` against real data and read the output. Chat features are verified by the user in Discord; ask them to try specific commands.
 

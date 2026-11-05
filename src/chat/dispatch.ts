@@ -6,7 +6,11 @@ export function firstTimeReply(channel: ChannelName, id: string): string {
   const key = channel === 'telegram' ? 'telegram.chat_id' : 'discord.user_id';
   const env = channel === 'telegram' ? 'TELEGRAM_CHAT_ID' : 'DISCORD_USER_ID';
   const value = channel === 'telegram' ? id : `"${id}"`;
-  return `你的 id 是：\`${id}\`\n\n请在 config.toml 里设置 ${key} = ${value}（或者设置环境变量 ${env}），然后重启程序。`;
+  return [
+    `你的 id 是：\`${id}\``,
+    `Docker 部署：填进 users/<名字>/.env 的 ${env}=${id}，然后 docker compose up -d <名字>（restart 不会重新读 .env）。`,
+    `本机运行：在 config.toml 里设置 ${key} = ${value}，然后重启程序。`,
+  ].join('\n\n');
 }
 
 /** One incoming message, already translated from the platform's types. */

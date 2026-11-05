@@ -34,6 +34,9 @@ describe('dispatch', () => {
     expect((discord.io as ReturnType<typeof io>).replies[0]).toContain(
       'discord.user_id = "123456789012345678"',
     );
+    expect((discord.io as ReturnType<typeof io>).replies[0]).toContain(
+      'users/<名字>/.env 的 DISCORD_USER_ID=123456789012345678',
+    );
 
     const telegram = incoming({ channel: 'telegram', senderId: '42' });
     await dispatch(telegram, '', handler, recordingLogger());

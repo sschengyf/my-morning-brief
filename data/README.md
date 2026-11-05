@@ -1,6 +1,6 @@
 # data/
 
-程序产生的所有数据都在这里（`config.toml` 里 `paths.data_dir` 的默认值）。除了这个说明文件，里面的内容都不提交 git。
+一个人的程序产生的所有数据都在 `data_dir` 里（`paths.data_dir`，默认是 `data/`）。Docker 部署时每个人的数据在 `users/<名字>/data/`，挂进容器的 `/app/data`；这个 `data/` 目录是不用 Docker、在本机运行时用的。除了这个说明文件，里面的内容都不提交 git。
 
 | 文件 | 内容 |
 |---|---|
@@ -11,4 +11,4 @@
 | `location.json` | 用 `/city` 切换城市后的临时位置，`/home` 后删除 |
 | `app.lock` | 运行中的程序的锁，正常退出时删除 |
 
-迁移或备份时复制整个目录即可；里面有日程和待办等私人数据，备份要加密。Docker 部署时 `compose.yaml` 把这个目录挂进容器（`/app/data`）；日志不在这里，用 `docker compose logs` 看。
+迁移或备份时复制整个目录即可；里面有日程和待办等私人数据，备份要加密。日志不在这里，用 `docker compose logs <名字>` 看。

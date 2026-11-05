@@ -129,6 +129,15 @@ describe('parseConfig', () => {
     ]);
   });
 
+  it('adds extra_feeds after feeds', () => {
+    const raw = minimalRawConfig();
+    raw.news = { feeds: ['https://rnz.test/rss'], extra_feeds: [{ url: 'https://hn.test/rss' }] };
+    expect(parseConfig(raw).news.feeds).toEqual([
+      { url: 'https://rnz.test/rss' },
+      { url: 'https://hn.test/rss' },
+    ]);
+  });
+
   it('checks feed URLs and rejects names that look like domains', () => {
     const raw = minimalRawConfig();
     raw.news = { feeds: [{ url: 'not a url', name: 'X' }] };

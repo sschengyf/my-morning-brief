@@ -44,6 +44,6 @@ For anything touching data sources, the model or prompts, also run `pnpm brief:d
 - **Logs only through `infra/logger.ts`**, which redacts registered secrets; `console` is banned elsewhere by eslint. Errors shown to the user go through `describeError` (redacted, Chinese).
 - **Data sources never throw.** They return `SourceResult` (`text` for the model, `raw` for the archive, `ok`); a failure becomes Chinese text like `（天气获取失败：请求超时）` and the brief still goes out.
 - **Model input and output are untrusted.** Gathered data is wrapped in `<数据>` tags with any tags inside defused. Model output goes through `sanitizeOutput`: every URL the model wrote is removed, then news ids like `[N3]` become links from our own id map. Links in messages can only come from subscribed feeds.
-- Prompts live in `src/llm/prompts.ts`; keep the copy in `PLAN.md` stage 3 in sync. After changing a prompt, compare several `brief:dry` runs.
+- Prompts live in `src/llm/prompts.ts`. `PLAN.md` quotes them (the brief prompt in stage 3, the news selection prompt in 8.1); keep every copy in sync. After changing a prompt, compare several `brief:dry` runs.
 - One instance per `data_dir` (`app.lock`); one instance serves one user. Do not add state shared across instances.
 - The chat core (`chat/core/`) is platform-independent; Telegram and Discord adapters only translate messages and check the sender (`dispatch`).

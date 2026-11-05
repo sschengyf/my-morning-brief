@@ -627,6 +627,64 @@ README：
   - 降级早报用 `- 来源 | 原文标题 [原文](链接)` 格式。
 - 人工检查：用真实的 44 个源跑 `brief:dry` 至少 3 次，确认每条都是“来源 | 标题 | 副标题”格式（只有标题的是两段）、来源和配置里的名字一致且没有重复、标题是中文、链接在行末。
 
+### 第三批：多用户（阶段 9）
+
+2026-11-05 决定加第二个用户，这一阶段优先于阶段 8 剩下的 8.2、8.3。仍然是“一人一个容器、共用一个 Ollama”（见第 7 节“多用户部署”），这一阶段解决人多以后配置怎么管：共用的设置只写一份，密钥和个人设置分开，加一个人不用复制一大段。
+
+#### 9.1 共用配置和个人配置
+
+- 新增环境变量 `MORNING_BRIEF_SHARED_CONFIG`，指向共用配置（例如 `config.shared.toml`）。没设置时和现在完全一样，只读一份 `config.toml`（单人部署不受影响）。
+- 设置了时：先读共用配置，再用个人配置（`MORNING_BRIEF_CONFIG`）覆盖，合并后再做校验和环境变量覆盖。
+  - 表（`[news]` 这类）逐键合并，个人配置的值优先；数组整个替换，不拼接。
+  - **`[ollama]` 只能写在共用配置里**：个人配置里出现 `[ollama]` 时启动报中文错误。所有容器必须用同一个模型和 `num_ctx`，否则 Ollama 会反复切换模型（`MORNING_BRIEF_OLLAMA_HOST` 环境变量照常可用）。
+  - `[news] extra_feeds`：个人在共用的 `feeds` 之外追加的订阅源，写法和 `feeds` 一样，排在共用订阅源后面。单文件模式下也可以用。
+  - 配置出错时，错误提示要说明是哪个文件的问题（能分清时）。
+- 哪些放共用、哪些放个人（README 写清楚）：
+  - 共用：`[ollama]`、默认的 `[news]`（feeds、select_count、brief_count 等）、`[archive]`、`[brief]` 里的重试和补发设置。
+  - 个人：聊天渠道（是否启用；token 和用户 id 放 `.env`）、`[brief]` 的家（时区、城市、经纬度）、`[calendar]`、`[news]` 的 interests、avoid、extra_feeds、`[todo]`。
+- 提供 `config.shared.example.toml` 和 `config.user.example.toml` 两个模板；`config.example.toml` 保留给单人部署。
+
+#### 9.2 目录和密钥
+
+```
+config.shared.toml        # 共用配置（gitignore）
+users/                    # 整个 gitignore
+  <名字>/
+    config.toml           # 个人配置
+    .env                  # 个人密钥：DISCORD_BOT_TOKEN、DISCORD_USER_ID（或 Telegram 的）
+    data/                 # 这个人的 data_dir
+```
+
+- 密钥用每人的 `.env`（compose 的 `env_file`），程序已经支持用环境变量提供 token 和用户 id。个人 `config.toml` 里不写密钥。
+- 每个人要有自己的 bot（同一个 Discord bot 被多个容器同时登录时，每个容器都会收到所有人的私信；Telegram 同一个 token 只能一个进程长轮询）。
+- 日历链接是秘密，放在个人 `config.toml` 里（在 gitignore 的 `users/` 下）。
+
+#### 9.3 compose 和加人
+
+- 要求：仓库里跟踪的文件不出现具体的用户名；加一个人不改跟踪的文件；每个人的服务只写名字、hostname、`env_file` 和挂载，其他设置（镜像、重启策略、Ollama 地址、退出等待、日志）共用一份。
+- 做法实现时实测后定：优先用 gitignore 的 `compose.override.yaml`（`docker compose` 自动读取）里每人一个服务，用 `extends` 继承 `compose.yaml` 里的模板服务；如果模板服务没法不启动，或者 `extends` 的合并行为不对，就改为脚本生成。
+- `scripts/add-user.sh <名字>`：建 `users/<名字>/data/`，复制 `config.user.example.toml` 和 `.env.example`，加好这个人的 compose 服务（或者打印出来让人贴进去），最后提示还要做的事：建 Discord bot、填 `.env`、`docker compose up -d <名字>`、私信机器人拿用户 id。名字只能是小写字母、数字和 `-`，已存在时报错退出，不覆盖。
+- 每个服务的 `hostname` 固定为 `morning-brief-<名字>`，这样重启后 `app.lock` 认得出是自己。
+
+#### 9.4 把现在的单人部署迁过去
+
+- 现在的用户（根目录的 `config.toml` 和 `data/`）也迁到 `users/<名字>/`，全部用同一种结构，不留两种部署方式并存。
+- 步骤（README 写成清单，迁移时由用户确认后执行）：`docker compose down` → 从 `config.toml` 拆出 `config.shared.toml` 和 `users/<名字>/config.toml`、`.env` → 把 `data/` 里的文件（除了跟踪的 `data/README.md`）移到 `users/<名字>/data/` → 启动 → 检查 `/history`、`/schedule`、`/todo` 都还在。
+- 迁移前先备份 `data/`。
+
+#### 9.5 文档
+
+- README 第 16 节“多人使用”改写：目录结构、共用和个人各写什么、`add-user.sh`、怎么给新的人建 bot、所有人用同一个模型、定时错开几分钟（模型一次只处理一个请求）、怎么只重启某一个人（`docker compose restart <名字>`）、怎么看某个人的日志。
+- `data/README.md`、`.gitignore`、`.dockerignore` 加上 `users/`、`config.shared.toml`、`compose.override.yaml`。
+
+**验收**：
+
+- 单元测试：没有 `MORNING_BRIEF_SHARED_CONFIG` 时行为不变；表逐键合并、个人优先、数组替换；个人配置里有 `[ollama]` 时报错；`extra_feeds` 追加在 `feeds` 后面（共用和单文件模式都行）；合并后照常校验（例如 `brief_count` 和 `select_count` 的关系按合并结果检查）；环境变量覆盖在合并之后。
+- 脚本：`add-user.sh` 建出完整目录；名字不合法、已存在时报错且不改任何文件。
+- 实际运行：现在的用户迁移后照常收到早报，`/history`、`/schedule`、`/todo` 数据都在；加第二个用户，两个容器同时运行、各自连上自己的 bot，互相收不到对方的消息；两人定时错开几分钟，都按时收到；记下两个容器同时生成时的排队时间和内存占用（第 7 节“还要做的事”）。
+
+**以后再做**（不在这一阶段）：在聊天里改个人偏好（`/interests`、`/avoid`、`/feeds`），存在各自的 `data/` 里、覆盖配置文件里的值，像 `location.json` 一样，这样日常调整不用找管理员、不用重启；等有人需要时再做。
+
 ## 6. 通用要求
 
 - 所有面向用户的文字（机器人回复、错误提示、README）都用简体中文；代码标识符和注释用英文。
@@ -669,7 +727,7 @@ README：
 - `state.json` 读取时如果 JSON 损坏，记一条 warn，改名为 `state.json.corrupt-<时间>` 保留现场，然后按空状态继续运行（最坏情况是当天多发一份早报），不能让进程启动失败。
 - `data_dir` 不存在时自动创建；没有写权限时启动失败并给出中文提示。
 
-## 7. 以后可以做的（这两批都不做）
+## 7. 以后可以做的（这三批都不做）
 
 - **待办助手和艾森豪威尔矩阵**（2026-11-05 讨论）。目标是用自然语言管理待办（“提醒我明天交水费”），并按艾森豪威尔矩阵（重要 × 紧急，四个象限）给待办分类。按顺序分步做，每步都可以单独用：
   1. **截止日期**：先做阶段 8.2。紧急程度由截止日期决定，没有日期就无从谈起。
@@ -704,7 +762,7 @@ README：
   - Peter Thiel：同样只能用 Google News，单独一个搜索（`%22Peter+Thiel%22+when:2d`），结果里 Palantir 和政治新闻很多，靠新闻筛选（阶段 8.1）过滤。
   - X 平台：不接。官方 API 读取要付费，Nitter 和 RSSHub 的 X 路由需要真实账号 cookie，违反使用条款且不稳定。如果以后某个只在 X 上发的账号确实重要，再考虑用官方 API 加一种 `type = "x"` 的源。
 - **根据反馈学习新闻偏好**（依赖阶段 8.1）：早报里每条新闻后加 👍/👎 按钮（Telegram inline keyboard / Discord 按钮），反馈连同标题、来源记到 `data_dir/feedback.jsonl`（追加写入）。每周让模型根据反馈总结出新的 `interests`/`avoid` 建议，发给用户，用户点“采用”后才写入。学到的偏好单独存在 `data_dir/preferences.toml`，和手写的配置合并使用，不改 `config.toml`。
-- **多用户部署：一人一个容器，共用一个 Ollama**（2026-11-04 讨论）。现在的设计不用改代码就能这样跑，要补的是部署文件和说明：
+- **多用户部署：一人一个容器，共用一个 Ollama**（2026-11-04 讨论；配置怎么管见阶段 9）。现在的设计不用改代码就能这样跑，要补的是部署文件和说明：
   - **结构**：每个用户一个容器，各自挂一个数据卷到容器里的 `data/`（`data_dir` 的默认值，例如 `/app/data`），各自一份 `config.toml`（用 `MORNING_BRIEF_CONFIG` 指向挂进来的文件），token 和用户 id 用环境变量。所有容器的 `ollama.host` 指向同一个 Ollama。
   - **每个用户要有自己的 bot token**：Telegram 同一个 token 只能一个进程长轮询（第二个 409）；Discord 允许多个连接，但每个容器都会收到所有人的私信再各自忽略，既浪费又容易出错。人多到一人一个 bot 管不过来时，再改成一个进程服务多个用户（按用户 id 分数据目录、对话记忆和 `/city` 位置），这是不小的重构，到时单独规划。
   - **Ollama 放在哪**：Mac 上的 Docker Desktop 用不了 GPU（Metal），所以 Ollama 在 Mac 本机运行，容器用 `http://host.docker.internal:11434` 连；Linux + NVIDIA 服务器上可以放进同一个 compose，用内部网络连（`http://ollama:11434`）。Ollama 没有身份验证，**不要把 11434 端口暴露到公网**。

@@ -12,5 +12,5 @@ export {
 } from './fs.js';
 export { LockError, acquireLock } from './lock.js';
 export { logger, redact, registerSecrets } from './logger.js';
-export { BARE_DOMAIN, looksLikeDomain } from './text.js';
+export { defuseDomains, looksLikeDomain, stripDomains } from './text.js';
 export type { Logger } from './logger.js';

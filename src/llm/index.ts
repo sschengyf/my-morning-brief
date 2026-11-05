@@ -2,7 +2,7 @@
 export { OllamaClient } from './ollama.js';
 export type { PickRequest } from './pick-news.js';
 export { BRIEF_PROMPT } from './prompts.js';
-export { sanitizeOutput } from './sanitize.js';
+export { cleanSource, sanitizeOutput } from './sanitize.js';
 export { LlmService } from './service.js';
 export type { BriefData } from './service.js';
 export { LlmError } from './types.js';

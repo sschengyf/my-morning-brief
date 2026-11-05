@@ -1,4 +1,4 @@
-import { type BriefData, sanitizeOutput } from '#/llm/index.js';
+import { type BriefData, cleanSource, sanitizeOutput } from '#/llm/index.js';
 import { dateLine, numberNews } from '#/sources/index.js';
 
 /** A brief without the model: the raw sections, for when every model retry has failed. */
@@ -14,7 +14,8 @@ export function formatFallbackBrief(data: BriefData): string {
   if (data.news) {
     const items = numberNews(data.news.items);
     const lines = items.map(
-      (item) => `- ${item.source} | ${sanitizeOutput(item.title)} [原文](${item.link})`,
+      (item) =>
+        `- ${cleanSource(item.source)} | ${sanitizeOutput(item.title)} [原文](${item.link})`,
     );
     for (const failure of data.news.failures)
       lines.push(`（${failure.source} 获取失败：${failure.reason}）`);

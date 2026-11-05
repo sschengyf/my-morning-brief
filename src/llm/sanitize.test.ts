@@ -62,30 +62,45 @@ describe('sanitizeBrief', () => {
     { ...newsItem(2), id: 'N2', source: 'CNBC' },
   ];
 
-  it('starts each news line with its source, after the list mark', () => {
+  it('starts each news list line with its source, after the list mark', () => {
     const brief = [
-      '今天有雨，记得带伞。',
+      '今天有雨，最值得看的是央行加息 [N2]',
       '',
       '📰 新闻：',
       '- 国债招标结果 | 第 1016 次招标 [N1]',
       '2. 民主党拿下国会 [N2]',
-      '没有列表符号的一条 [N2]',
+      '3、没有空格的中文编号 [N2]',
+      '3.5 级地震不是列表 [N2]',
     ].join('\n');
     expect(sanitizeBrief(brief, news)).toBe(
       [
-        '今天有雨，记得带伞。',
+        '今天有雨，最值得看的是央行加息 [原文](https://rnz.test/2)',
         '',
         '📰 新闻：',
-        // Added after cleanup, so the domain in the feed title is kept.
-        '- Latest stories from interest.co.nz | 国债招标结果 | 第 1016 次招标 [原文](https://rnz.test/1)',
+        // The domain in the feed title stays readable but cannot become a link.
+        '- Latest stories from interest．co．nz | 国债招标结果 | 第 1016 次招标 [原文](https://rnz.test/1)',
         '2. CNBC | 民主党拿下国会 [原文](https://rnz.test/2)',
-        'CNBC | 没有列表符号的一条 [原文](https://rnz.test/2)',
+        '3、CNBC | 没有空格的中文编号 [原文](https://rnz.test/2)',
+        '3.5 级地震不是列表 [原文](https://rnz.test/2)',
       ].join('\n'),
     );
   });
 
-  it('uses the first id’s source and leaves lines without known ids alone', () => {
-    expect(sanitizeBrief('- 两条合写 [N2] [N1]\n- 编造的 [N9]', news)).toBe(
+  it('cleans links and Markdown out of a feed-controlled source', () => {
+    const hostile: NumberedNews[] = [
+      {
+        ...newsItem(1),
+        id: 'N1',
+        source: '[Login](https://evil.example/x) **Big** | evil.com/login',
+      },
+    ];
+    expect(sanitizeBrief('- 标题 [N1]', hostile)).toBe(
+      '- Login Big evil．com/login | 标题 [原文](https://rnz.test/1)',
+    );
+  });
+
+  it('uses the first known id’s source and leaves lines without known ids alone', () => {
+    expect(sanitizeBrief('- 两条合写 [N9] [N2] [N1]\n- 编造的 [N9]', news)).toBe(
       '- CNBC | 两条合写 [原文](https://rnz.test/2) [原文](https://rnz.test/1)\n- 编造的',
     );
   });

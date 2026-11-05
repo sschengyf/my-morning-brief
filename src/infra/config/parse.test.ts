@@ -139,10 +139,18 @@ describe('parseConfig', () => {
 
   it('does not let brief_count exceed select_count', () => {
     const raw = minimalRawConfig();
-    raw.news = { select_count: 8 };
+    raw.news = { select_count: 8, brief_count: 9 };
     expectConfigError(raw, 'news.brief_count 不能大于 news.select_count');
     raw.news = { select_count: 8, brief_count: 8 };
     expect(parseConfig(raw).news.brief_count).toBe(8);
+  });
+
+  it('defaults brief_count to 10, or select_count when that is smaller', () => {
+    const raw = minimalRawConfig();
+    raw.news = { select_count: 5 };
+    expect(parseConfig(raw).news.brief_count).toBe(5);
+    raw.news = { select_count: 50 };
+    expect(parseConfig(raw).news.brief_count).toBe(10);
   });
 
   it('validates the timezone', () => {

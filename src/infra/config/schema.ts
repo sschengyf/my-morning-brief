@@ -87,13 +87,19 @@ export const schema = z.object({
       max_items_per_feed: positiveInt.default(10),
       max_age_hours: positiveInt.default(48),
       select_count: positiveInt.default(40),
-      brief_count: positiveInt.default(10),
+      brief_count: positiveInt.optional(),
       dedup_days: nonNegativeInt.default(3),
       feeds: z.array(feed).default([]),
       interests: z.array(z.string().min(1)).default([]),
       avoid: z.array(z.string().min(1)).default([]),
       select_timeout_seconds: positiveInt.default(120),
     })
+    // Unset, it is 10 but never more than select_count, so older configs with a
+    // small select_count still start.
+    .transform(({ brief_count, ...news }) => ({
+      ...news,
+      brief_count: brief_count ?? Math.min(10, news.select_count),
+    }))
     .refine((news) => news.brief_count <= news.select_count, {
       message: '不能大于 news.select_count',
       path: ['brief_count'],

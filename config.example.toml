@@ -39,7 +39,7 @@ ics_urls = []   # 可以填多个；webcal:// 自动转成 https://
 max_items_per_feed = 10
 max_age_hours = 48     # 只要最近多少小时内发布的条目；没有发布时间的条目保留
 select_count = 40      # 候选池：按源轮流挑出这么多条交给模型筛选；源多时调大，让每个源都有机会
-brief_count = 10       # 早报里写几条新闻，由模型从候选池里挑；不能大于 select_count
+brief_count = 10       # 早报里写几条新闻，由模型从候选池里挑；不能大于 select_count，不写时取 10 和 select_count 中小的那个
 dedup_days = 3         # 最近几天的早报里已经用过的新闻不再出现；0 表示不去重
 # 每项可以只写地址（早报里的来源用 feed 自己的标题），也可以写成 { url = "…", name = "短名" }。
 # 名字不要写成域名的样子（interest.co.nz 写成 interest）；几个源可以用同一个名字。

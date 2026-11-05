@@ -34,7 +34,14 @@ export async function selectNews(
   const pool = candidatePool(candidates, excludeLinks, config.select_count);
   const count = config.brief_count;
   const firstInTurn = { items: pool.slice(0, count), poolSize: pool.length };
-  if (pool.length <= count || !pick) return { ...firstInTurn, method: 'round_robin' };
+  if (pool.length <= count || !pick) {
+    if (pick && config.select_count <= count) {
+      logger.info(
+        `select_count（${config.select_count}）不大于 brief_count（${count}），不让模型挑新闻；想让模型挑就调大 select_count`,
+      );
+    }
+    return { ...firstInTurn, method: 'round_robin' };
+  }
 
   try {
     const picks = await pick({

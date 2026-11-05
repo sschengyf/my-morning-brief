@@ -149,8 +149,8 @@ describe('Scheduler', () => {
 
     t.setNow('08:00');
     await t.scheduler.tick();
-    expect(t.discord.received).toEqual(['RNZ | 早报 [原文](https://rnz.test/1)']);
-    expect(t.telegram.received).toEqual(['RNZ | 早报 [原文](https://rnz.test/1)']);
+    expect(t.discord.received).toEqual(['早报 [原文](https://rnz.test/1)']);
+    expect(t.telegram.received).toEqual(['早报 [原文](https://rnz.test/1)']);
     expect((await t.state()).sent).toEqual({ morning: '2026-11-03' });
     expect(t.core.onBrief).toHaveBeenCalledTimes(1);
     expect(t.keepAwake).toHaveBeenCalledTimes(1);
@@ -219,7 +219,7 @@ describe('Scheduler', () => {
     t.setNow('08:07');
     await t.scheduler.tick();
     expect(t.modelCalls()).toBe(3);
-    expect(t.discord.received).toEqual(['RNZ | 早报 [原文](https://rnz.test/1)']);
+    expect(t.discord.received).toEqual(['早报 [原文](https://rnz.test/1)']);
     expect(await t.state()).toMatchObject({ sent: { morning: '2026-11-03' }, attempts: {} });
   });
 
@@ -258,7 +258,7 @@ describe('Scheduler', () => {
     t.setNow('08:02');
     await t.scheduler.tick();
     expect(t.modelCalls()).toBe(1);
-    expect(t.telegram.received).toEqual(['RNZ | 早报 [原文](https://rnz.test/1)']);
+    expect(t.telegram.received).toEqual(['早报 [原文](https://rnz.test/1)']);
     expect(t.discord.received).toHaveLength(1);
     expect(await t.state()).toMatchObject({ sent: { morning: '2026-11-03' }, pendingBrief: null });
   });

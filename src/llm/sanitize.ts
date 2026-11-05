@@ -1,4 +1,4 @@
-import { BARE_DOMAIN } from '#/infra/index.js';
+import { defuseDomains, stripDomains } from '#/infra/index.js';
 import type { NumberedNews } from '#/sources/index.js';
 
 /** Removes <think>…</think> blocks, and anything before a stray closing tag. */
@@ -26,7 +26,7 @@ export function sanitizeOutput(text: string, news: NumberedNews[] = []): string 
     .replace(MARKDOWN_LINK, '$1')
     .replace(AUTOLINK, '')
     .replace(SCHEME_URL, '')
-    .replace(BARE_DOMAIN, '')
+    .replace(/.+/g, stripDomains)
     .replace(NEWS_ID, (_match, n: string) => {
       const link = links.get(`N${Number(n)}`);
       return link ? `[原文](${link})` : '';
@@ -36,25 +36,44 @@ export function sanitizeOutput(text: string, news: NumberedNews[] = []): string 
     .trim();
 }
 
-/** Known news ids mentioned in `text`, in order of first mention. */
-const LIST_MARK = /^(\s*(?:[-*•]|\d+[.)、])\s+)/;
+/**
+ * A feed's name or title, safe to show: it comes from the feed, so links and
+ * Markdown are removed, "|" would break the news line, and a domain is kept
+ * readable but not linkable ("interest．co．nz") instead of being deleted.
+ */
+export function cleanSource(source: string): string {
+  return defuseDomains(
+    source
+      .replace(MARKDOWN_LINK, '$1')
+      .replace(AUTOLINK, '')
+      .replace(SCHEME_URL, '')
+      .replace(/[*_`[\]|]/g, ' '),
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// "- ", "1. ", "1、" (often without a space); not "3.5 级地震".
+const LIST_MARK = /^(\s*(?:[-*•]\s+|\d+[.)、](?!\d)\s*))/;
 
 /**
- * sanitizeOutput for a brief, which also starts each news line with its source:
- * "- 标题 | 副标题 [N3]" becomes "- RNZ | 标题 | 副标题 [原文](…)". The model is
- * told not to write the source, since it translates names it should copy; the
- * source is added after cleanup, so a feed title containing a domain survives.
+ * sanitizeOutput for a brief, which also starts each news list line with its
+ * source: "- 标题 | 副标题 [N3]" becomes "- RNZ | 标题 | 副标题 [原文](…)". The
+ * model is told not to write the source, since it translates names it should
+ * copy. Lines outside lists (the greeting citing a story) are left alone.
  */
 export function sanitizeBrief(text: string, news: NumberedNews[]): string {
-  const sources = new Map(news.map((item) => [item.id.toUpperCase(), item.source]));
+  const sources = new Map(news.map((item) => [item.id.toUpperCase(), cleanSource(item.source)]));
   return text
     .split('\n')
     .map((line) => {
       const clean = sanitizeOutput(line, news);
-      const id = new RegExp(NEWS_ID.source, 'i').exec(line);
-      const source = id && sources.get(`N${Number(id[1])}`);
-      if (!source) return clean;
-      const mark = LIST_MARK.exec(clean)?.[1] ?? '';
+      const mark = LIST_MARK.exec(clean)?.[1];
+      // The first id the map knows; a made-up one before it does not count.
+      const source = [...line.matchAll(NEWS_ID)]
+        .map((match) => sources.get(`N${Number(match[1])}`))
+        .find((name) => name !== undefined);
+      if (mark === undefined || !source) return clean;
       let rest = clean.slice(mark.length);
       // The model wrote the source anyway, exactly: do not repeat it.
       if (rest.startsWith(`${source} |`)) rest = rest.slice(source.length + 2).trimStart();
@@ -64,6 +83,7 @@ export function sanitizeBrief(text: string, news: NumberedNews[]): string {
     .trim();
 }
 
+/** Known news ids mentioned in `text`, in order of first mention. */
 export function usedNewsIds(text: string, news: NumberedNews[]): string[] {
   const known = new Set(news.map((item) => item.id));
   const ids = [...text.matchAll(NEWS_ID)].map((match) => `N${Number(match[1])}`);

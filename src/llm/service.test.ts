@@ -72,7 +72,7 @@ describe('LlmService', () => {
     expect(result.input).toContain('[N2] 来源 RNZ｜Story 2｜xxxxxxxxxx');
     expect(result.input).toContain('（hnrss 获取失败：HTTP 500）');
     expect(result.input).not.toContain('https://');
-    expect(result.brief).toBe('RNZ | 今天晴。[原文](https://rnz.test/2) 见');
+    expect(result.brief).toBe('今天晴。[原文](https://rnz.test/2) 见');
     expect(result.news.map((item) => item.id)).toEqual(['N1', 'N2', 'N3']);
     expect(result.usedIds).toEqual(['N2']);
   });

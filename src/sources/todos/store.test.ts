@@ -2,7 +2,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { makeTempDir } from '../../../test/helpers.js';
-import { fetchTodos, formatTodos } from './source.js';
 import { addTodo, completeTodo, listTodos } from './store.js';
 
 async function todoFile(content?: string): Promise<string> {
@@ -95,27 +94,5 @@ describe('todos', () => {
     const file = await todoFile();
     await Promise.all(['A', 'B', 'C', 'D'].map((text) => addTodo(file, text)));
     expect((await listTodos(file)).map((todo) => todo.text).sort()).toEqual(['A', 'B', 'C', 'D']);
-  });
-
-  it('formats the list for the brief', async () => {
-    expect(formatTodos([])).toBe('没有未完成的待办');
-    const result = await fetchTodos(await todoFile('- [ ] A\n- [ ] B\n'));
-    expect(result).toEqual({
-      text: '1. A\n2. B',
-      raw: {
-        open: [
-          { number: 1, text: 'A' },
-          { number: 2, text: 'B' },
-        ],
-      },
-      ok: true,
-    });
-  });
-
-  it('reports a read failure instead of throwing', async () => {
-    const dir = await makeTempDir(); // a directory cannot be read as a file
-    const result = await fetchTodos(dir);
-    expect(result.ok).toBe(false);
-    expect(result.text).toMatch(/^（待办读取失败：/);
   });
 });

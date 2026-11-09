@@ -31,3 +31,8 @@ feeds = [
 
 [archive]
 retention_days = 90
+
+# 用 Microsoft To Do 管理待办时（README 第 18 节）：Azure 应用注册里的“应用程序（客户端）ID”，大家共用一个应用；
+# 想用自己注册的应用，就在个人配置里写 [microsoft] 覆盖。它不是机密
+[microsoft]
+client_id = ""

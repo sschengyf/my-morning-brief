@@ -13,6 +13,9 @@ export type {
   NewsItem,
   NumberedNews,
 } from './news/types.js';
-export { fetchTodos, formatTodos } from './todos/source.js';
-export { addTodo, completeTodo, listTodos } from './todos/store.js';
+export { formatTodos } from './todos/format.js';
+export { MsLoginNeeded, startDeviceLogin } from './todos/ms-auth.js';
+export { fetchTodos, msAuthOptions, readTodos } from './todos/source.js';
+export type { TodoReadOptions } from './todos/source.js';
+export { addTodo, completeTodo } from './todos/store.js';
 export { fetchWeather } from './weather/fetch.js';

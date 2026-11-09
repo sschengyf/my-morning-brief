@@ -8,21 +8,22 @@ import {
   fetchWeather,
   type NewsFetchResult,
   type SourceResult,
+  type TodoReadOptions,
 } from '#/sources/index.js';
 
 /** The data sources, replaceable in tests. */
 export interface Sources {
   weather(location: Location, now: DateTime): Promise<SourceResult<unknown>>;
   calendar(timezone: string, now: DateTime): Promise<SourceResult<unknown>>;
-  todos(): Promise<SourceResult<unknown>>;
+  todos(timezone: string, now: DateTime): Promise<SourceResult<unknown>>;
   news(now: DateTime): Promise<NewsFetchResult>;
 }
 
-export function defaultSources(config: Config): Sources {
+export function defaultSources(config: Config, todoOptions: TodoReadOptions = {}): Sources {
   return {
     weather: (location, now) => fetchWeather(location, now),
     calendar: (timezone, now) => fetchCalendar(config.calendar.ics_urls, timezone, now),
-    todos: () => fetchTodos(config.todo.file),
+    todos: (timezone, now) => fetchTodos(config, now.setZone(timezone).toISODate()!, todoOptions),
     news: (now) =>
       fetchNews(
         config.news.feeds,

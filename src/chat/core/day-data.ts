@@ -32,7 +32,7 @@ export class DayDataCache {
     const [weather, calendar, todos] = await Promise.all([
       sources.weather(location, now),
       sources.calendar(location.timezone, now),
-      sources.todos(),
+      sources.todos(location.timezone, now),
     ]);
     const data: DayData = {
       weather: weather.text,

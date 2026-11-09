@@ -4,7 +4,8 @@
 
 | 文件 | 内容 |
 |---|---|
-| `todo.md` | 待办，`/add`、`/done` 改的就是它 |
+| `todo.md` | 待办（`todo.backend = "markdown"` 时），`/add`、`/done` 改的就是它 |
+| `ms-token.json` | Microsoft To Do 的登录凭证（`/todo_login` 后生成，权限 600），是秘密 |
 | `archive/日期/` | 每天的早报、给模型的输入和原始数据 |
 | `schedules.json` | 用 `/schedule` 设置的定时 |
 | `state.json` | 定时早报的状态（今天发过没有、重试） |

@@ -21,6 +21,7 @@ export const COMMANDS = [
     description: '完成待办',
     arg: { name: 'number', description: '待办序号', required: true },
   },
+  { name: 'todo_login', description: '登录 Microsoft To Do（用它管理待办时）' },
   { name: 'refresh', description: '重新获取今天的天气、日程和待办' },
   {
     name: 'history',
@@ -42,16 +43,23 @@ export const COMMANDS = [
   { name: 'help', description: '帮助' },
 ] as const;
 
-export const HELP_TEXT = `我是你的早报助手。按你设的时间把天气、日程、待办和新闻整理好发给你，有问题可以直接问我。
+const TODO_HELP = {
+  markdown: `/todo 看待办
+/add 内容 添加待办
+/done 序号 完成待办`,
+  ms_todo: `/todo 看待办（在 Microsoft To Do 里增删改，这里只读）
+/todo_login 登录 Microsoft To Do`,
+};
+
+export function helpText(backend: keyof typeof TODO_HELP): string {
+  return `我是你的早报助手。按你设的时间把天气、日程、待办和新闻整理好发给你，有问题可以直接问我。
 
 /brief 立即生成一份早报
 /schedule 看定时早报
 /schedule add 08:00 添加定时（可以加“工作日”或“周末”）
 /schedule remove 2 删除第 2 个定时
 /schedule clear 删除全部定时
-/todo 看待办
-/add 内容 添加待办
-/done 序号 完成待办
+${TODO_HELP[backend]}
 /refresh 重新获取今天的天气、日程和待办
 /history 最近有早报的日期
 /history 11-02 看那天的早报
@@ -61,3 +69,4 @@ export const HELP_TEXT = `我是你的早报助手。按你设的时间把天气
 /clear 清空对话记忆
 
 其他文字都会当成问题，比如“今天要带伞吗”“第二条新闻展开讲讲”。`;
+}

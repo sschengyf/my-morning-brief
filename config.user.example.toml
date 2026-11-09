@@ -24,5 +24,10 @@ interests = []     # 感兴趣的话题，例如 ["新西兰本地政策", "AI �
 avoid = []         # 不想看的话题，例如 ["体育", "名人八卦"]
 extra_feeds = []   # 在共用订阅源之外再加的，写法和 feeds 一样，例如 [{ url = "https://…", name = "短名" }]
 
+# 待办：markdown 是 data/ 里的 todo.md（用 /add、/done 管理）；ms_todo 是 Microsoft To Do，只读（README 第 18 节）
+[todo]
+backend = "markdown"
+lists = []   # ms_todo 时读哪些列表，例如 ["Tasks", "Work"]；不写就读默认列表
+
 [monitor]
 healthcheck_url = ""   # 可选，这个人自己的健康检查地址，例如 healthchecks.io 的 ping 地址（README 第 17 节）

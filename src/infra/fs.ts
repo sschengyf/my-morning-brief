@@ -14,10 +14,15 @@ const TEMP_FILE_PATTERN = /^\..+\.[0-9a-f]{12}\.tmp$/;
  * so a crash mid-write never leaves a truncated file behind. Same directory
  * keeps the rename on one filesystem, where it is atomic.
  */
-export async function writeFileAtomic(path: string, content: string): Promise<void> {
+export async function writeFileAtomic(
+  path: string,
+  content: string,
+  /** File permissions, e.g. 0o600 for secrets; the umask still applies. */
+  mode = 0o666,
+): Promise<void> {
   const tempPath = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);
   try {
-    const handle = await open(tempPath, 'w');
+    const handle = await open(tempPath, 'w', mode);
     try {
       await handle.writeFile(content, 'utf8');
       await handle.sync();

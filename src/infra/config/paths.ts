@@ -21,7 +21,7 @@ export function resolvePaths(config: Config): Config {
   return {
     ...config,
     paths: { data_dir: dataDir },
-    todo: { file: resolveFrom(dataDir, config.todo.file) },
+    todo: { ...config.todo, file: resolveFrom(dataDir, config.todo.file) },
     archive: { ...config.archive, dir: resolveFrom(dataDir, config.archive.dir) },
   };
 }

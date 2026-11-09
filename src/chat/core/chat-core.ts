@@ -8,12 +8,12 @@ import type { ChatIO } from '../channel.js';
 import { historyCommand } from './commands/history.js';
 import { scheduleCommand } from './commands/schedule.js';
 import { cityCommand, homeCommand, whereCommand } from './commands/location.js';
-import { addCommand, doneCommand, todoCommand } from './commands/todo.js';
+import { addCommand, doneCommand, todoCommand, todoLoginCommand } from './commands/todo.js';
 import type { ChatDeps, Command, CommandContext } from './context.js';
 import { Conversation } from './conversation.js';
 import { DayDataCache } from './day-data.js';
 import { linksToIds } from './links.js';
-import { HELP_TEXT } from './menu.js';
+import { helpText } from './menu.js';
 import { parseCommand } from './parse.js';
 
 /**
@@ -42,7 +42,7 @@ export class ChatCore {
       location: () => this.location(),
       invalidateData: () => this.dayData.invalidate(),
     };
-    const help: Command = (_args, io) => io.reply(HELP_TEXT);
+    const help: Command = (_args, io) => io.reply(helpText(deps.config.todo.backend));
     this.commands = {
       start: help,
       help,
@@ -55,6 +55,7 @@ export class ChatCore {
       todo: todoCommand,
       add: addCommand,
       done: doneCommand,
+      todo_login: todoLoginCommand,
       history: historyCommand,
       schedule: scheduleCommand,
       city: cityCommand,

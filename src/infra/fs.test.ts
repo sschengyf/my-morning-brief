@@ -1,4 +1,4 @@
-import { chmod, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { makeTempDir } from '../../test/helpers.js';
@@ -12,6 +12,12 @@ describe('writeFileAtomic', () => {
     await writeFileAtomic(path, '第二次');
     expect(await readFile(path, 'utf8')).toBe('第二次');
     expect(await readdir(dir)).toEqual(['state.json']);
+  });
+
+  it('can write a file only its owner may read', async () => {
+    const path = join(await makeTempDir(), 'ms-token.json');
+    await writeFileAtomic(path, '{}', 0o600);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it('leaves the original untouched and cleans up when writing fails midway', async () => {

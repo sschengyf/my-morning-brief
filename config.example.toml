@@ -1,5 +1,5 @@
 [paths]
-data_dir = "data"   # 程序产生的所有数据（todo.md、archive/、schedules.json、state.json、location.json、app.lock）都在这里；相对路径按项目根目录解析。Docker 把数据卷挂到这个目录
+data_dir = "data"   # 程序产生的所有数据（todo.md、ms-token.json、archive/、schedules.json、state.json、location.json、app.lock）都在这里；相对路径按项目根目录解析。Docker 把数据卷挂到这个目录
 
 # 聊天渠道：至少开一个。两个都开时，早报两边都发；在哪边提问就在哪边回复
 [telegram]
@@ -54,7 +54,12 @@ avoid = []                    # 不想看的话题，除非是大新闻否则不
 select_timeout_seconds = 120  # 模型筛选新闻的超时，超时或失败就用按源轮流的前 brief_count 条
 
 [todo]
-file = "todo.md"   # 相对路径按 data_dir 解析，支持 ~ 和绝对路径
+backend = "markdown"   # markdown：下面的 todo.md，用 /add、/done 管理；ms_todo：Microsoft To Do，只读（README 第 18 节）
+file = "todo.md"   # markdown 用。相对路径按 data_dir 解析，支持 ~ 和绝对路径
+lists = []         # ms_todo 用：读哪些列表，例如 ["Tasks", "Work"]；不写就读默认列表
+
+[microsoft]
+client_id = ""   # ms_todo 用：Azure 应用注册里的“应用程序（客户端）ID”，不是机密
 
 [archive]
 dir = "archive"        # 相对路径按 data_dir 解析

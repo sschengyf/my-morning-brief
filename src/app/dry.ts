@@ -1,5 +1,5 @@
 import { Archive } from '#/archive/index.js';
-import { runBrief } from '#/brief/index.js';
+import { defaultSources, runBrief } from '#/brief/index.js';
 import { loadConfig, logger } from '#/infra/index.js';
 import { createLlm, prepare } from './setup.js';
 
@@ -12,7 +12,13 @@ export async function dryRun(): Promise<void> {
 
   const result = await runBrief(
     { kind: 'manual', archive: false, send: async () => undefined },
-    { config, llm, archive: new Archive(config.archive.dir) },
+    {
+      config,
+      llm,
+      archive: new Archive(config.archive.dir),
+      // A running container may share this data_dir: use its Microsoft token, never replace it.
+      sources: defaultSources(config, { saveTokens: false }),
+    },
   );
   if (result.input !== undefined) {
     process.stdout.write(`\n===== 给模型的数据 =====\n\n${result.input}\n`);

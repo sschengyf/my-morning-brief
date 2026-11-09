@@ -89,6 +89,8 @@ interface Setup {
   dataDir?: string;
   /** Defaults to one daily 08:00 schedule; null for "never set". */
   schedules?: Schedule[] | null;
+  /** Extra config sections, e.g. { todo: { backend: 'ms_todo' } }. */
+  config?: Record<string, unknown>;
 }
 
 const DAILY_0800: Schedule = {
@@ -100,7 +102,11 @@ const DAILY_0800: Schedule = {
 
 async function setup(options: Setup = {}) {
   const dataDir = options.dataDir ?? (await makeTempDir());
-  const config = parseConfig({ ...minimalRawConfig(), paths: { data_dir: dataDir } });
+  const config = parseConfig({
+    ...minimalRawConfig(),
+    paths: { data_dir: dataDir },
+    ...options.config,
+  });
   const schedules = options.schedules === undefined ? [DAILY_0800] : options.schedules;
   if (schedules && !options.dataDir) await saveSchedules(dataDir, schedules);
   const requests: ChatMessage[][] = [];
@@ -163,6 +169,30 @@ describe('ChatCore commands', () => {
     expect(await send('/done 5')).toEqual(['没有这个序号，先用 /todo 看看列表']);
     expect(await send('/done abc')).toEqual(['没有这个序号，先用 /todo 看看列表']);
     expect(await readFile(config.todo.file, 'utf8')).toBe('# 待办\n\n- [x] 交水费\n- [ ] 买牛奶\n');
+  });
+
+  it('keeps Microsoft To Do read only and asks to log in', async () => {
+    const { send } = await setup({
+      config: {
+        todo: { backend: 'ms_todo' },
+        microsoft: { client_id: '00000000-0000-0000-0000-000000000001' },
+      },
+    });
+    const readOnly = '待办在 Microsoft To Do 里管理，请在 App 里修改；用 /todo 看当前列表';
+    expect(await send('/add 交水费')).toEqual([readOnly]);
+    expect(await send('/done 1')).toEqual([readOnly]);
+    expect(await send('/todo')).toEqual([
+      '待办获取失败：还没有登录 Microsoft To Do，在聊天里发 /todo_login',
+    ]);
+    const help = (await send('/help'))[0]!;
+    expect(help).toContain('/todo_login');
+    expect(help).not.toContain('/add');
+  });
+
+  it('explains how to switch before /todo_login when todo.md is in use', async () => {
+    const { send } = await setup();
+    expect((await send('/todo_login'))[0]).toMatch(/^现在用的是 todo\.md/);
+    expect((await send('/help'))[0]).not.toContain('/todo_login');
   });
 
   it('sends /brief to the asker and archives it as manual', async () => {

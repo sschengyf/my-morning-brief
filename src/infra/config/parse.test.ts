@@ -162,6 +162,21 @@ describe('parseConfig', () => {
     expect(parseConfig(raw).news.brief_count).toBe(10);
   });
 
+  it('needs a Microsoft client id for the To Do backend, and checks its form', () => {
+    const raw = minimalRawConfig();
+    raw.todo = { backend: 'ms_todo', lists: ['Tasks'] };
+    expectConfigError(
+      raw,
+      'microsoft.client_id 用 Microsoft To Do（todo.backend = "ms_todo"）时必须填写',
+    );
+    raw.microsoft = { client_id: 'not-a-guid' };
+    expectConfigError(raw, 'microsoft.client_id 应为应用注册里的“应用程序（客户端）ID”');
+    raw.microsoft = { client_id: '00000000-0000-0000-0000-000000000001' };
+    expect(parseConfig(raw).todo).toMatchObject({ backend: 'ms_todo', lists: ['Tasks'] });
+    raw.todo = { backend: 'notion' };
+    expect(() => parseConfig(raw)).toThrow('todo.backend');
+  });
+
   it('validates the timezone', () => {
     const raw = minimalRawConfig();
     raw.brief = { timezone: 'Auckland' };

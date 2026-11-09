@@ -51,7 +51,7 @@ my-morning-brief/
 │   ├── sources/                # 数据源
 │   │   ├── weather/            #   fetch.ts（Open-Meteo）、codes.ts（天气代码、紫外线等级）、format.ts、types.ts
 │   │   ├── calendar/           #   fetch.ts、expand.ts（展开重复日程、时区修正）、format.ts、types.ts
-│   │   ├── todos/              #   store.ts（读写 Markdown 待办文件）、ms-todo.ts 和 ms-auth.ts（阶段 8.2：Microsoft To Do，只读，设备码登录）、source.ts
+│   │   ├── todos/              #   store.ts（读写 Markdown 待办文件）、ms-todo.ts 和 ms-auth.ts（阶段 8.2：Microsoft To Do，只读，设备码登录）、format.ts（截止日期、排序）、types.ts、source.ts（按后端读取）
 │   │   ├── news/               #   fetch.ts（RSS/Atom）、clean.ts（摘要清理、链接规范化）、format.ts（编号）、types.ts
 │   │   ├── gather.ts           #   汇总成一段给模型看的文本（<数据> 标记）
 │   │   └── common.ts           #   SourceResult、fetchOk、describeError
@@ -254,7 +254,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 1. 一句话总览今天（比如“今天下午有雨，日程比较满”）。
 2. 🌤 天气：概括 + 实用建议（穿什么、要不要带伞、防晒）。
 3. 📅 日程：按时间列出；如果日程之间很紧或者和天气有关（比如户外活动遇到雨），提醒一下。
-4. ✅ 待办：列出最值得今天处理的几项（最多 5 项）。
+4. ✅ 待办：列出最值得今天处理的几项（最多 5 项），已过期、今天截止和标了 ⭐ 的优先。
 5. 📰 新闻：提供的每条新闻都要写，按给出的顺序，每条一行，格式是“- 中文标题 | 中文副标题 [N3]”。中文标题是原标题的翻译；中文副标题根据摘要用一句话概括，尽量短，不要逐句翻译。标注“只有标题”的新闻没有副标题，写成“- 中文标题 [N3]”。不要写来源（程序会自动加上），行首不写编号，编号只在句末写一次。不要写网址。
 
 新闻的写法：
@@ -587,7 +587,7 @@ README：
 - **后端接口**：个人配置 `[todo] backend = "markdown" | "ms_todo"`，默认 `markdown`（现在的 `todo.md`，行为不变；不用微软账号的人继续用它）。`sources/todos/` 定义 `TodoBackend`：都提供 `list`，可写的后端另外提供 `add`、`complete`。待办统一成 `Todo = { title, due: 'YYYY-MM-DD' | null, important: boolean, list: string | null }`；markdown 后端的 `due` 为 `null`、`important` 为 `false`。
 - **配置**：
   ```toml
-  # config.shared.toml：所有人共用一个应用注册
+  # config.shared.toml：大家共用一个应用注册；想用自己注册的应用的人，在个人配置里写 [microsoft] 覆盖
   [microsoft]
   client_id = ""      # Azure 应用注册的“应用程序（客户端）ID”。公共客户端没有密钥，这个 id 不是机密
 
@@ -596,7 +596,7 @@ README：
   backend = "ms_todo"
   lists = ["Tasks"]   # 读哪些列表；不写时读默认列表（wellknownListName = defaultList）
   ```
-  `backend = "ms_todo"` 但 `client_id` 为空时，配置校验报错（错误信息写明两个文件）。`[todo] file` 只对 markdown 有效。
+  `backend = "ms_todo"` 但 `client_id` 为空时，配置校验报错。client ID 只是应用的身份，登录和令牌每人各自一份，所以默认共用；别人想在授权页上看到自己的应用，就在个人配置里覆盖（2026-11-10 讨论）。`[todo] file` 只对 markdown 有效。
 - **应用注册**（README 写步骤，用户自己操作，免费）：在 Azure 门户注册应用，账户类型选“仅个人 Microsoft 账户”，打开“允许公共客户端流”，委托权限 `Tasks.Read` 和 `offline_access`。只申请读权限，机器人改不了你的待办。
 - **登录 `/todo_login`**（设备码流程）：
   1. 向 `https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode` 申请设备码，回复“打开 <网址>，输入 <验证码>，15 分钟内有效”。验证码一次性、短时有效，只能用来完成这次登录，所以可以发在私信里；`device_code` 不发、不写日志。
@@ -615,7 +615,7 @@ README：
 - **失败**：没登录、refresh token 失效（长期不用会过期，或者用户在账户设置里撤销了授权）、网络失败、429 限流，都只影响待办部分：“（待办获取失败：……）”，授权问题加上“用 /todo_login 重新登录”，早报照常发出。不重试，早报不等。
 - **迁移**：现有 `todo.md` 里的条目由用户手动搬到 To Do。切到 ms_todo 后不再读 `todo.md`，也不删除它。
 - **隐私**：待办本来就存在微软的服务器上；模型仍在本机，待办只发给本地模型。
-- **多用户**：所有人共用一个 `client_id`，各自 `/todo_login`，token 在各自的 `data_dir`。
+- **多用户**：默认共用一个 `client_id`（个人配置可以覆盖），各自 `/todo_login`，token 在各自的 `data_dir`；登录和数据始终各自分开。
 
 **验收**：
 - 单元测试（网络全部 mock）：设备码登录成功、被拒绝、过期、重复发起；刷新 token 并原子写回；refresh token 失效时提示重新登录；按名字找列表、找不到时列出现有列表、翻页；截止日期天数（两个 TZ、跨午夜、过期 / 今天 / 以后）、排序、重要标记、多列表；ms_todo 时 `/add`、`/done` 的提示；配置校验（ms_todo 缺 `client_id`）；日志里不出现任何 token。markdown 后端的现有测试不变。

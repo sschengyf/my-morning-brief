@@ -15,6 +15,7 @@
     "start": "tsx src/index.ts",
     "brief:once": "tsx src/index.ts --once",
     "brief:dry": "tsx src/index.ts --dry",
+    "dev:dry": "MORNING_BRIEF_SHARED_CONFIG=config.shared.toml MORNING_BRIEF_CONFIG=users/tester/config.toml MORNING_BRIEF_DATA_DIR=users/tester/data tsx src/index.ts --dry",
     "test": "TZ=UTC vitest run && TZ=Pacific/Auckland vitest run",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",

@@ -46,7 +46,12 @@ scripts/add-user.sh ivan        # 名字用小写字母、数字和 -
 
 `ollama.host` 保持 `http://localhost:11434` 就行：`compose.yaml` 用环境变量 `MORNING_BRIEF_OLLAMA_HOST` 把它换成 `http://host.docker.internal:11434`（容器访问 Mac 本机的地址）。
 
-本机开发（不用 Docker）用的是单独一份 `config.toml`：`cp config.example.toml config.toml`，所有设置写在一起，数据在项目根目录的 `data/`。本机只跑 `pnpm brief:dry` 和测试，聊天渠道不用开（`brief:dry` 不检查），也**不要填任何人正在用的 bot token**；聊天功能在容器里试。不要在本机跑 `pnpm start`：用了某个人的 token 时，它会和那个人的容器同时登录同一个机器人，每句话收到两份回复，早报也可能发两次，`app.lock` 拦不住（两边的数据目录不同）。
+**本机开发**用一个测试用户 `tester`（`scripts/add-user.sh tester`），它有自己的容器和**单独的测试机器人**：
+
+- `pnpm dev:dry`：用 `config.shared.toml` 加 `users/tester/config.toml`、数据在 `users/tester/data/`，跑本机最新的代码打印一份早报，不用重新构建镜像。环境变量 `MORNING_BRIEF_DATA_DIR` 让同一份个人配置在本机和容器里都能用。
+- 聊天功能：`docker compose build template && docker compose up -d tester`，在测试机器人里试，没问题再重建其他人的容器。
+
+只想用一个配置文件、不用 Docker 时，也可以 `cp config.example.toml config.toml` 后跑 `pnpm brief:dry`，数据在项目根目录的 `data/`。不要在本机跑 `pnpm start`：用了某个人的 token 时，它会和那个人的容器同时登录同一个机器人，每句话收到两份回复，早报也可能发两次，`app.lock` 拦不住（两边的数据目录不同）。
 
 ## 3. 创建聊天机器人
 
@@ -268,7 +273,7 @@ scripts/add-user.sh alice
 1. 给 alice 建一个**她自己的** Discord 机器人（第 3 步），token 填进 `users/alice/.env`。每个人要有自己的机器人：同一个 token 被两个容器登录时，每个容器都会收到所有人的私信。
 2. 改 `users/alice/config.toml`：家的城市和时区、日历、兴趣（`interests`、`avoid`），想多订几个源就写 `extra_feeds`。
 3. `docker compose up -d alice`，让 alice 私信机器人拿到用户 ID，填进 `.env` 后再 `docker compose up -d alice`。
-4. 让 alice 在聊天里设置定时，和别人错开几分钟：模型一次只处理一个请求，大家都在 08:00 时后面的人要排队（一份早报约一分钟）。
+4. 让 alice 在聊天里设置定时，和别人错开几分钟：模型一次只处理一个请求，大家都在 08:00 时后面的人要排队（一份早报约一分钟；实测两人同时发时，后面的人多等约 45 秒）。不要靠调高 Ollama 的 `OLLAMA_NUM_PARALLEL` 来解决：64GB 的 Mac 跑 32B 模型时内存只剩 1 GB 左右，并发会再多占内存。
 
 其他：
 
@@ -348,7 +353,7 @@ node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）�
 
 ### brief:dry
 
-`brief:dry` 不连接任何聊天渠道，所以 `config.toml` 里的 token 可以不填，渠道也可以都不开；本机开发就这样用（见第 2 节）。它只打印，不写归档；但待办文件不存在时会创建它。
+`brief:dry` 和 `dev:dry` 不连接任何聊天渠道，所以 token 可以不填，渠道也可以都不开。它只打印，不写归档；但待办文件不存在时会创建它。
 
 ### 聊天渠道
 

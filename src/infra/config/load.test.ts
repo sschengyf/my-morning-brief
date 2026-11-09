@@ -64,6 +64,20 @@ describe('loadConfig', () => {
     expect(config.ollama.model).toBe('qwen3');
   });
 
+  it('lets MORNING_BRIEF_DATA_DIR override data_dir, relative to the project root', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      '[paths]\ndata_dir = "/app/data"\n[telegram]\nenabled = true\nbot_token = "abcdefgh"\n[ollama]\nmodel = "qwen3"\n',
+    );
+    const fromFile = await loadConfig({ path, env: {} });
+    expect(fromFile.paths.data_dir).toBe('/app/data');
+    const config = await loadConfig({ path, env: { MORNING_BRIEF_DATA_DIR: 'users/tester/data' } });
+    expect(config.paths.data_dir).toBe(join(PROJECT_ROOT, 'users/tester/data'));
+    expect(config.archive.dir).toBe(join(PROJECT_ROOT, 'users/tester/data/archive'));
+  });
+
   it('lets environment variables override the token and chat id', async () => {
     const dir = await makeTempDir();
     const path = join(dir, 'config.toml');

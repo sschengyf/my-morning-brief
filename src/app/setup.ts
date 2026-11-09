@@ -44,7 +44,7 @@ export function createChannels(config: Config): Channel[] {
 }
 
 export const NO_OWNER_HINT =
-  '还没有配置主人 id：先启动程序（docker compose up -d 或 pnpm start），给机器人发一条私信，按回复把 id 填进 config.toml';
+  '还没有配置主人 id：给机器人发一条私信，按回复把 id 填进 .env（Docker 部署）或 config.toml（本机运行）';
 
 /** Starts each channel on its own; one that fails is stopped, logged and left out. */
 export async function startChannels(

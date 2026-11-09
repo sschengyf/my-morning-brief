@@ -106,5 +106,8 @@ function applyEnvOverrides(raw: Record<string, unknown>, env: NodeJS.ProcessEnv)
   // Not OLLAMA_HOST: Ollama's own variable is often a bare "0.0.0.0" meant for the server.
   const ollama = { ...(raw.ollama as Record<string, unknown> | undefined) };
   if (env.MORNING_BRIEF_OLLAMA_HOST) ollama.host = env.MORNING_BRIEF_OLLAMA_HOST;
-  return { ...raw, telegram, discord, ollama };
+  // Lets one personal config run both in its container (/app/data) and locally (dev:dry).
+  const paths = { ...(raw.paths as Record<string, unknown> | undefined) };
+  if (env.MORNING_BRIEF_DATA_DIR) paths.data_dir = env.MORNING_BRIEF_DATA_DIR;
+  return { ...raw, telegram, discord, ollama, paths };
 }

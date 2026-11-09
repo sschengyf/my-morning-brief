@@ -4,7 +4,9 @@ import { accessToken, type MsAuthOptions } from './ms-auth.js';
 import type { Todo } from './types.js';
 
 const GRAPH = 'https://graph.microsoft.com/v1.0';
-const MAX_TASKS_PER_LIST = 100;
+const PAGE_SIZE = 100;
+// The brief filters by due date afterwards, so a cut-off must be far above any real list.
+const MAX_TASKS_PER_LIST = 1000;
 
 export interface MsTodoOptions extends MsAuthOptions {
   /** List names to read; empty means the default list. */
@@ -35,7 +37,7 @@ export async function listMsTodos(options: MsTodoOptions): Promise<Todo[]> {
     lists.map(async (list) => {
       const url = new URL(`${GRAPH}/me/todo/lists/${encodeURIComponent(list.id)}/tasks`);
       url.searchParams.set('$filter', "status ne 'completed'");
-      url.searchParams.set('$top', String(MAX_TASKS_PER_LIST));
+      url.searchParams.set('$top', String(PAGE_SIZE));
       const tasks = await graphAll<TodoTask>(options, url.toString(), MAX_TASKS_PER_LIST);
       return tasks.map((task) => toTodo(task, list.displayName, options.timezone));
     }),
@@ -43,7 +45,7 @@ export async function listMsTodos(options: MsTodoOptions): Promise<Todo[]> {
   return perList.flat().filter((todo) => todo.title);
 }
 
-/** The lists named in config (case and spacing aside), or the default list. */
+/** The lists named in config (case and spacing aside, each once), or the default list. */
 export function pickLists(all: TodoList[], names: string[]): TodoList[] {
   if (names.length === 0) {
     const fallback = all.find((list) => list.wellknownListName === 'defaultList') ?? all[0];
@@ -56,7 +58,8 @@ export function pickLists(all: TodoList[], names: string[]): TodoList[] {
       `找不到列表 ${missing.join('、')}，现有列表：${all.map((list) => list.displayName).join('、')}`,
     );
   }
-  return names.map((name) => all.find((list) => key(list.displayName) === key(name))!);
+  const lists = names.map((name) => all.find((list) => key(list.displayName) === key(name))!);
+  return [...new Set(lists)];
 }
 
 export function toTodo(task: TodoTask, list: string, timezone: string): Todo {
@@ -69,14 +72,18 @@ export function toTodo(task: TodoTask, list: string, timezone: string): Todo {
 }
 
 /**
- * To Do keeps a date, not a time, but sends it as a date-time in some zone
- * (midnight in the user's zone, or in UTC). Read in that zone and seen from
- * home, either way lands on the right day for timezones east of UTC; a zone
- * luxon does not know (Windows names) falls back to the date as written.
+ * To Do keeps a date, not a time, but sends it as a date-time: midnight in
+ * that zone (the date as written), or the user's local midnight converted to
+ * UTC (Auckland's 5 Nov arrives as 4 Nov 11:00 UTC). Midnight is taken as
+ * written; anything else is seen from home, which is right on either side of
+ * UTC. A zone luxon does not know (Windows names) falls back to the date as
+ * written.
  */
 export function dueDate(due: { dateTime: string; timeZone: string }, timezone: string): string {
+  const written = due.dateTime.slice(0, 10);
+  if (due.dateTime.slice(11, 19) === '00:00:00') return written;
   const parsed = DateTime.fromISO(due.dateTime, { zone: due.timeZone });
-  return parsed.isValid ? parsed.setZone(timezone).toISODate()! : due.dateTime.slice(0, 10);
+  return parsed.isValid ? parsed.setZone(timezone).toISODate()! : written;
 }
 
 /** GETs every page of a Graph collection, up to `limit` items. */
@@ -92,14 +99,15 @@ async function graphAll<T>(options: MsTodoOptions, url: string, limit = Infinity
 }
 
 async function graphGet(options: MsTodoOptions, url: string): Promise<unknown> {
-  const get = async (forceRefresh: boolean) =>
+  const get = (token: string) =>
     (options.fetch ?? fetch)(url, {
-      headers: { Authorization: `Bearer ${await accessToken(options, forceRefresh)}` },
+      headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-  let response = await get(false);
+  const token = await accessToken(options);
+  let response = await get(token);
   // The access token was revoked or rejected early: refresh once and retry.
-  if (response.status === 401) response = await get(true);
+  if (response.status === 401) response = await get(await accessToken(options, token));
   if (response.status === 429) throw new Error('Microsoft To Do 暂时限流，稍后再试');
   if (!response.ok) throw new Error(`Microsoft To Do 返回 HTTP ${response.status}`);
   return response.json();

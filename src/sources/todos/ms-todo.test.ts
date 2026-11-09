@@ -32,6 +32,7 @@ describe('pickLists', () => {
 
   it('matches configured names regardless of case and spacing, in config order', () => {
     expect(pickLists(LISTS, [' work', 'TASKS']).map((list) => list.id)).toEqual(['L2', 'L1']);
+    expect(pickLists(LISTS, ['Work', 'work ']).map((list) => list.id)).toEqual(['L2']);
   });
 
   it('names the missing lists and the ones that exist', () => {
@@ -47,6 +48,13 @@ describe('dueDate', () => {
     const utc = { dateTime: '2026-11-05T00:00:00.0000000', timeZone: 'UTC' };
     expect(dueDate(local, 'Pacific/Auckland')).toBe('2026-11-05');
     expect(dueDate(utc, 'Pacific/Auckland')).toBe('2026-11-05');
+  });
+
+  it('lands on the right day west of UTC too', () => {
+    const utc = { dateTime: '2026-11-05T00:00:00.0000000', timeZone: 'UTC' };
+    const local = { dateTime: '2026-11-05T08:00:00.0000000', timeZone: 'UTC' }; // LA midnight
+    expect(dueDate(utc, 'America/Los_Angeles')).toBe('2026-11-05');
+    expect(dueDate(local, 'America/Los_Angeles')).toBe('2026-11-05');
   });
 
   it('falls back to the written date for a zone luxon does not know', () => {

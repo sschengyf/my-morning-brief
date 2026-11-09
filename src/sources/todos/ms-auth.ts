@@ -51,6 +51,9 @@ interface TokenReply {
 // racing could each store a token the other has already replaced.
 const queues = new Map<string, Promise<unknown>>();
 const loginsWaiting = new Set<string>();
+// Tokens refreshed by a dry run, which may not write them back: kept here so
+// one run refreshes once, not once per Graph request.
+const unsaved = new Map<string, StoredTokens>();
 
 function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
   const run = (queues.get(key) ?? Promise.resolve()).then(task, task);
@@ -63,13 +66,16 @@ function serialized<T>(key: string, task: () => Promise<T>): Promise<T> {
 
 /**
  * A valid access token, refreshed (and stored) when it is about to expire, or
- * when `forceRefresh` because Microsoft Graph rejected the current one.
+ * when it is still the `rejected` one Microsoft Graph just turned down. Requests
+ * rejected together thus refresh once: the later ones find a new token.
  */
-export function accessToken(options: MsAuthOptions, forceRefresh = false): Promise<string> {
+export function accessToken(options: MsAuthOptions, rejected?: string): Promise<string> {
   return serialized(options.tokenFile, async () => {
     const now = (options.now ?? Date.now)();
-    const stored = await readTokens(options.tokenFile);
-    if (!forceRefresh && stored.expires_at - EXPIRY_MARGIN_MS > now) return stored.access_token;
+    const kept = options.save === false ? unsaved.get(options.tokenFile) : undefined;
+    const stored = kept ?? (await readTokens(options.tokenFile));
+    const usable = stored.expires_at - EXPIRY_MARGIN_MS > now && stored.access_token !== rejected;
+    if (usable) return stored.access_token;
     const reply = await postToken(options, {
       grant_type: 'refresh_token',
       refresh_token: stored.refresh_token,
@@ -78,7 +84,8 @@ export function accessToken(options: MsAuthOptions, forceRefresh = false): Promi
     if (reply.error === 'invalid_grant') throw new MsLoginNeeded(LOGIN_EXPIRED);
     const tokens = toStored(reply, stored.refresh_token, now);
     if (!tokens) throw new Error(`Microsoft 登录服务出错（${reply.error ?? '回复不完整'}）`);
-    if (options.save !== false) await saveTokens(options.tokenFile, tokens);
+    if (options.save === false) unsaved.set(options.tokenFile, tokens);
+    else await saveTokens(options.tokenFile, tokens);
     return tokens.access_token;
   });
 }
@@ -154,7 +161,8 @@ async function pollForTokens(
     }).catch((): TokenReply => ({ error: 'authorization_pending' }));
     const tokens = toStored(reply, null, now());
     if (tokens) {
-      await saveTokens(options.tokenFile, tokens);
+      // Queued with refreshes, so one already under way cannot overwrite the new login.
+      await serialized(options.tokenFile, () => saveTokens(options.tokenFile, tokens));
       return { ok: true };
     }
     if (reply.error === 'authorization_pending') continue;

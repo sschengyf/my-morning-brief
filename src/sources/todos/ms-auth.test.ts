@@ -70,13 +70,18 @@ describe('accessToken', () => {
     expect(redact('token refresh-new-456 and access-new-456')).not.toMatch(/new-456/);
   });
 
-  it('keeps the old refresh token when the reply has none, and refreshes when forced', async () => {
+  it('refreshes a rejected token once, keeping the old refresh token when the reply has none', async () => {
     const file = await tokenFile(stored(NOW + 3_600_000));
     const { fetchMock } = tokenServer([{ access_token: 'access-new-789', expires_in: 3600 }]);
-    await accessToken(
-      { clientId: CLIENT_ID, tokenFile: file, fetch: fetchMock, now: () => NOW },
-      true,
-    );
+    const options = { clientId: CLIENT_ID, tokenFile: file, fetch: fetchMock, now: () => NOW };
+    // Two requests rejected together: the second finds the token already replaced.
+    expect(
+      await Promise.all([
+        accessToken(options, 'access-old-123'),
+        accessToken(options, 'access-old-123'),
+      ]),
+    ).toEqual(['access-new-789', 'access-new-789']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(await readFile(file, 'utf8')).refresh_token).toBe('refresh-old-123');
   });
 
@@ -95,6 +100,9 @@ describe('accessToken', () => {
     };
     expect(await accessToken(options)).toBe('access-dry');
     expect(await readFile(file, 'utf8')).toBe(before);
+    // Kept in memory: the next request in the same run does not refresh again.
+    expect(await accessToken(options)).toBe('access-dry');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes once when asked twice at the same time', async () => {

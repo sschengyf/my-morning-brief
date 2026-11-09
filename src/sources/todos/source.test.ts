@@ -52,6 +52,43 @@ describe('fetchTodos', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('gives the brief only todos due soon from Microsoft To Do, and chat all of them', async () => {
+    const config = await msConfig();
+    await writeFile(
+      join(config.paths.data_dir, 'ms-token.json'),
+      JSON.stringify({ refresh_token: 'r', access_token: 'a', expires_at: Date.now() + 3_600_000 }),
+    );
+    const due = (date: string) => ({ dateTime: `${date}T00:00:00.0000000`, timeZone: 'UTC' });
+    const fetchMock = vi.fn<typeof fetch>(async (url) =>
+      String(url).endsWith('/me/todo/lists')
+        ? Response.json({
+            value: [{ id: 'L1', displayName: 'Tasks', wellknownListName: 'defaultList' }],
+          })
+        : Response.json({
+            value: [
+              { title: 'Soon', dueDateTime: due('2026-11-04') },
+              { title: 'Later', dueDateTime: due('2026-11-20') },
+              { title: 'Someday', importance: 'high' },
+            ],
+          }),
+    );
+    const brief = await fetchTodos(config, '2026-11-02', { fetch: fetchMock }, 'brief');
+    expect(brief.text).toBe('- Soon（截止 11月4日，还有 2 天）');
+    expect(brief.raw.open).toHaveLength(3); // the archive keeps them all
+    const chat = await fetchTodos(config, '2026-11-02', { fetch: fetchMock });
+    expect(chat.text.split('\n')).toHaveLength(3);
+
+    const nothingSoon = { ...config, todo: { ...config.todo, brief_days: 1 } };
+    const empty = await fetchTodos(nothingSoon, '2026-11-02', { fetch: fetchMock }, 'brief');
+    expect(empty.text).toBe('近 1 天没有要截止的待办');
+  });
+
+  it('does not filter todo.md for the brief, which has no due dates', async () => {
+    const config = testConfig(await makeTempDir());
+    await writeFile(config.todo.file, '- [ ] A\n');
+    expect((await fetchTodos(config, '2026-11-02', {}, 'brief')).text).toBe('1. A');
+  });
+
   it('reads Microsoft To Do with a stored token, dates seen from home', async () => {
     const config = await msConfig();
     await writeFile(

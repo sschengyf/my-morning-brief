@@ -15,7 +15,8 @@ import {
 export interface Sources {
   weather(location: Location, now: DateTime): Promise<SourceResult<unknown>>;
   calendar(timezone: string, now: DateTime): Promise<SourceResult<unknown>>;
-  todos(timezone: string, now: DateTime): Promise<SourceResult<unknown>>;
+  /** `brief` leaves out todos due later; chat gets them all. */
+  todos(timezone: string, now: DateTime, scope?: 'brief' | 'all'): Promise<SourceResult<unknown>>;
   news(now: DateTime): Promise<NewsFetchResult>;
 }
 
@@ -23,7 +24,8 @@ export function defaultSources(config: Config, todoOptions: TodoReadOptions = {}
   return {
     weather: (location, now) => fetchWeather(location, now),
     calendar: (timezone, now) => fetchCalendar(config.calendar.ics_urls, timezone, now),
-    todos: (timezone, now) => fetchTodos(config, now.setZone(timezone).toISODate()!, todoOptions),
+    todos: (timezone, now, scope) =>
+      fetchTodos(config, now.setZone(timezone).toISODate()!, todoOptions, scope),
     news: (now) =>
       fetchNews(
         config.news.feeds,

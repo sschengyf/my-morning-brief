@@ -12,10 +12,24 @@ export function sortTodos(todos: Todo[]): Todo[] {
   );
 }
 
+const day = (iso: string) => DateTime.fromISO(iso, { zone: 'utc' });
+
+/** Whole days from `today` to `due` (both YYYY-MM-DD); negative when overdue. */
+function daysUntil(due: string, today: string): number {
+  return Math.round(day(due).diff(day(today), 'days').days);
+}
+
+/**
+ * What the brief lists: overdue, due today and due within `days`. Todos due
+ * later or never stay out, so the brief does not repeat them every day.
+ */
+export function briefTodos(todos: Todo[], today: string, days: number): Todo[] {
+  return todos.filter((todo) => todo.due !== null && daysUntil(todo.due, today) <= days);
+}
+
 /** "截止 11月5日，还有 3 天", "今天截止" or "已过期 2 天", counted from `today` (YYYY-MM-DD). */
 export function describeDue(due: string, today: string): string {
-  const day = (iso: string) => DateTime.fromISO(iso, { zone: 'utc' });
-  const days = Math.round(day(due).diff(day(today), 'days').days);
+  const days = daysUntil(due, today);
   if (days === 0) return '今天截止';
   if (days < 0) return `已过期 ${-days} 天`;
   const date = day(due);

@@ -116,6 +116,8 @@ export const schema = z
         file: z.string().min(1).default('todo.md'),
         // Microsoft To Do lists to read; empty means the default list.
         lists: z.array(z.string().trim().min(1)).default([]),
+        // Microsoft To Do: the brief lists only todos due within this many days (overdue included).
+        brief_days: nonNegativeInt.default(3),
       })
       .prefault({}),
     microsoft: z

@@ -75,7 +75,7 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
   const [weather, calendar, todos, fetched] = await Promise.all([
     sources.weather(location, now),
     sources.calendar(location.timezone, now),
-    sources.todos(location.timezone, now),
+    sources.todos(location.timezone, now, 'brief'),
     withNews ? sources.news(now) : Promise.resolve(null),
   ]);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeDue, formatTodos, sortTodos } from './format.js';
+import { briefTodos, describeDue, formatTodos, sortTodos } from './format.js';
 import type { Todo } from './types.js';
 
 const todo = (title: string, extra: Partial<Todo> = {}): Todo => ({
@@ -22,6 +22,25 @@ describe('describeDue', () => {
     expect(describeDue('2027-01-02', '2026-12-31')).toBe('截止 2027年1月2日，还有 2 天');
     // New Zealand daylight saving starts on 27 Sep 2026; a date is still a whole day.
     expect(describeDue('2026-09-28', '2026-09-26')).toBe('截止 9月28日，还有 2 天');
+  });
+});
+
+describe('briefTodos', () => {
+  it('keeps overdue, today and the next few days, counting the last day in', () => {
+    const todos = [
+      todo('overdue', { due: '2026-10-30' }),
+      todo('today', { due: '2026-11-02' }),
+      todo('in 3 days', { due: '2026-11-05' }),
+      todo('in 4 days', { due: '2026-11-06', important: true }),
+      todo('starred, no date', { important: true }),
+      todo('no date'),
+    ];
+    expect(briefTodos(todos, '2026-11-02', 3).map((t) => t.title)).toEqual([
+      'overdue',
+      'today',
+      'in 3 days',
+    ]);
+    expect(briefTodos(todos, '2026-11-02', 0).map((t) => t.title)).toEqual(['overdue', 'today']);
   });
 });
 

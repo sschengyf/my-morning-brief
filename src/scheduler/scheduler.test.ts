@@ -100,6 +100,7 @@ async function setup(
   const telegram = fakeChannel('telegram');
   const stopAwake = vi.fn();
   const keepAwake = vi.fn(() => stopAwake);
+  const pings: [outcome: string, message: string][] = [];
   const scheduler = new Scheduler({
     brief: {
       config,
@@ -113,6 +114,7 @@ async function setup(
     channels: [discord, telegram],
     logger,
     keepAwake,
+    healthcheck: async (outcome, message) => void pings.push([outcome, message]),
   });
   return {
     config,
@@ -122,6 +124,7 @@ async function setup(
     discord,
     telegram,
     errors,
+    pings,
     keepAwake,
     stopAwake,
     modelCalls: () => modelCalls,
@@ -155,11 +158,13 @@ describe('Scheduler', () => {
     expect(t.core.onBrief).toHaveBeenCalledTimes(1);
     expect(t.keepAwake).toHaveBeenCalledTimes(1);
     expect(t.stopAwake).toHaveBeenCalledTimes(1);
+    expect(t.pings).toEqual([['success', '08:00 每天 的定时早报已发送']]);
 
     t.setNow('08:30');
     await t.scheduler.tick();
     expect(t.discord.received).toHaveLength(1);
     expect(t.modelCalls()).toBe(1);
+    expect(t.pings).toHaveLength(1);
   });
 
   it('archives the brief under its schedule and prunes old archives', async () => {
@@ -194,6 +199,7 @@ describe('Scheduler', () => {
     const t = await setup({ schedules: [] });
     await t.scheduler.tick();
     expect(t.modelCalls()).toBe(0);
+    expect(t.pings).toEqual([]);
   });
 
   it('waits while a /brief is being made', async () => {
@@ -234,6 +240,7 @@ describe('Scheduler', () => {
     expect(t.discord.received).toHaveLength(1);
     expect(t.discord.received[0]).toMatch(/^⚠️ 本地模型暂时不可用/);
     expect((await t.state()).sent).toEqual({ morning: '2026-11-03' });
+    expect(t.pings).toEqual([['success', '08:00 每天 的定时早报已发送']]);
   });
 
   it('sends the fallback right away when the next retry would miss the window', async () => {
@@ -261,6 +268,7 @@ describe('Scheduler', () => {
     expect(t.telegram.received).toEqual(['早报 [原文](https://rnz.test/1)']);
     expect(t.discord.received).toHaveLength(1);
     expect(await t.state()).toMatchObject({ sent: { morning: '2026-11-03' }, pendingBrief: null });
+    expect(t.pings).toEqual([['success', '08:00 每天 的定时早报已发送']]);
   });
 
   it('gives up on a brief nobody can receive once the retries are used up', async () => {
@@ -274,6 +282,20 @@ describe('Scheduler', () => {
     expect(t.modelCalls()).toBe(1);
     expect(await t.state()).toMatchObject({ sent: { morning: '2026-11-03' }, pendingBrief: null });
     expect(t.errors.some((e) => e.includes('重试用完'))).toBe(true);
+    expect(t.pings).toEqual([
+      ['fail', '08:00 每天 的早报重试用完，discord、telegram 仍然没有收到'],
+    ]);
+  });
+
+  it('reports a failure when one channel never receives the brief', async () => {
+    const t = await setup();
+    t.telegram.failing = true;
+    for (const time of ['08:00', '08:02', '08:07', '08:17']) {
+      t.setNow(time);
+      await t.scheduler.tick();
+    }
+    expect(t.discord.received).toHaveLength(1);
+    expect(t.pings).toEqual([['fail', '08:00 每天 的早报重试用完，telegram 仍然没有收到']]);
   });
 
   it('stops retrying when the window closes', async () => {
@@ -285,6 +307,9 @@ describe('Scheduler', () => {
     expect(t.modelCalls()).toBe(1);
     expect((await t.state()).attempts).toEqual({});
     expect(t.errors.some((e) => e.includes('补发截止时间还没成功'))).toBe(true);
+    expect(t.pings).toEqual([['fail', '08:00 每天 的早报到补发截止时间还没成功，今天不再重试']]);
+    await t.scheduler.tick();
+    expect(t.pings).toHaveLength(1);
   });
 
   it('drops a pending resend whose schedule was deleted', async () => {

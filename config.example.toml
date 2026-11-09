@@ -61,4 +61,4 @@ dir = "archive"        # 相对路径按 data_dir 解析
 retention_days = 90    # 超过天数的归档在每天发送早报后删除；0 表示永久保留
 
 [monitor]
-healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthchecks.io 的 ping 地址
+healthcheck_url = ""   # 可选，例如 healthchecks.io 的 ping 地址，定时早报发出后请求一次（README 第 17 节）

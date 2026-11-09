@@ -17,6 +17,7 @@ import {
   type ScheduleWindow,
   windowsOn,
 } from '#/schedules/index.js';
+import { createHealthcheck, type Healthcheck } from './healthcheck.js';
 import { keepAwake as defaultKeepAwake } from './keep-awake.js';
 import { loadState, type PendingBrief, saveState, type State } from './state.js';
 
@@ -31,6 +32,8 @@ export interface SchedulerDeps {
   channels: Channel[];
   logger?: Logger;
   keepAwake?: () => () => void;
+  /** Defaults to pinging monitor.healthcheck_url. */
+  healthcheck?: Healthcheck;
   checkEveryMs?: number;
 }
 
@@ -43,6 +46,7 @@ export interface SchedulerDeps {
 export class Scheduler {
   private readonly logger: Logger;
   private readonly clock: () => DateTime;
+  private readonly healthcheck: Healthcheck;
   private timer: NodeJS.Timeout | null = null;
   private running: Promise<void> | null = null;
   private stopped = false;
@@ -50,6 +54,8 @@ export class Scheduler {
   constructor(private readonly deps: SchedulerDeps) {
     this.logger = deps.logger ?? deps.brief.logger ?? defaultLogger;
     this.clock = deps.brief.now ?? (() => DateTime.now());
+    this.healthcheck =
+      deps.healthcheck ?? createHealthcheck(deps.brief.config.monitor.healthcheck_url, this.logger);
   }
 
   start(): void {
@@ -82,8 +88,9 @@ export class Scheduler {
     const location = await getEffectiveLocation(config, this.logger);
     const schedules = (await loadSchedules(dataDir, this.logger)).schedules ?? [];
     const loaded = await loadState(dataDir, this.logger);
-    const state = this.tidy(loaded, schedules, now.setZone(location.timezone));
+    const { state, givenUp } = this.tidy(loaded, schedules, now.setZone(location.timezone));
     if (JSON.stringify(state) !== JSON.stringify(loaded)) await saveState(dataDir, state);
+    for (const message of givenUp) await this.healthcheck('fail', message);
 
     // A /brief in progress: check again once it is done.
     if (this.deps.core.isBriefRunning()) return;
@@ -103,22 +110,28 @@ export class Scheduler {
 
   /**
    * Drops bookkeeping that no longer applies: other days, deleted schedules,
-   * and retries whose window has closed (logged once, as the brief is lost).
+   * and retries whose window has closed (logged once, as the brief is lost;
+   * returned in `givenUp` for the health check).
    */
-  private tidy(state: State, schedules: Schedule[], now: DateTime): State {
+  private tidy(
+    state: State,
+    schedules: Schedule[],
+    now: DateTime,
+  ): { state: State; givenUp: string[] } {
     const today = now.toISODate()!;
     const ids = new Set(schedules.map((s) => s.id));
     const windows = windowsOn(now, schedules, this.deps.brief.config.brief.catch_up_hours);
     const open = new Map(windows.map((w) => [w.schedule.id, w]));
     const attempts: State['attempts'] = {};
+    const givenUp: string[] = [];
     for (const [id, attempt] of Object.entries(state.attempts)) {
       if (attempt.date !== today || !ids.has(id)) continue;
       const window = open.get(id);
       if (!window) continue; // no longer applies today (its days were changed)
       if (now >= window.end) {
-        this.logger.error(
-          `${describeSchedule(window.schedule)} 的早报到补发截止时间还没成功，今天不再重试`,
-        );
+        const message = `${describeSchedule(window.schedule)} 的早报到补发截止时间还没成功，今天不再重试`;
+        this.logger.error(message);
+        givenUp.push(message);
         continue;
       }
       attempts[id] = attempt;
@@ -127,7 +140,7 @@ export class Scheduler {
     const pendingBrief =
       pending && pending.date === today && attempts[pending.scheduleId] ? pending : null;
     const sent = Object.fromEntries(Object.entries(state.sent).filter(([id]) => ids.has(id)));
-    return { ...state, sent, attempts, pendingBrief };
+    return { state: { ...state, sent, attempts, pendingBrief }, givenUp };
   }
 
   private async run(window: ScheduleWindow, state: State): Promise<void> {
@@ -197,6 +210,14 @@ export class Scheduler {
   }
 
   private async markSent(window: ScheduleWindow, state: State): Promise<void> {
+    const message = `${describeSchedule(window.schedule)} 的定时早报已发送`;
+    await this.markDone(window, state);
+    this.logger.info(message);
+    await this.healthcheck('success', message);
+  }
+
+  /** Records today's brief for this schedule as finished, sent or given up. */
+  private async markDone(window: ScheduleWindow, state: State): Promise<void> {
     const { config, archive } = this.deps.brief;
     const attempts = { ...state.attempts };
     delete attempts[window.schedule.id];
@@ -206,7 +227,6 @@ export class Scheduler {
       attempts,
       pendingBrief: null,
     });
-    this.logger.info(`${describeSchedule(window.schedule)} 的定时早报已发送`);
     const removed = await archive
       .prune(config.archive.retention_days, window.date)
       .catch((error: unknown) => {
@@ -231,10 +251,10 @@ export class Scheduler {
     const now = this.clock();
 
     if (pending && failures > retryMinutes.length) {
-      this.logger.error(
-        `${describeSchedule(window.schedule)} 的早报重试用完，${pending.channels.join('、')} 仍然没有收到`,
-      );
-      return this.markSent(window, { ...state, pendingBrief: null });
+      const message = `${describeSchedule(window.schedule)} 的早报重试用完，${pending.channels.join('、')} 仍然没有收到`;
+      this.logger.error(message);
+      await this.markDone(window, { ...state, pendingBrief: null });
+      return this.healthcheck('fail', message);
     }
     let nextRetryAt = now.plus({ minutes: retryMinutes[failures - 1] ?? 0 });
     let counted = failures;

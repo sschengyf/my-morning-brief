@@ -720,20 +720,37 @@ users/                    # 整个 gitignore
   - `docker compose down` → 拆出 `config.shared.toml` 和 `users/ivan/config.toml`、`.env` → 把 `data/` 里的文件（除了跟踪的 `data/README.md`）移到 `users/ivan/data/` → `add-user.sh` 同样的服务写进 `compose.override.yaml` → 启动 → 用户检查了 `/schedule`、`/todo`、`/history`、`/brief`。
   - 订阅源放在个人配置里（个人的 `feeds` 整个替换共用的），共用配置只留 3 个默认源，给新加的人做起点。
   - 合并后的配置和迁移前逐项比较过，除了占位的 Telegram token 以外完全一样。
-- **本地开发不连聊天渠道**：根目录的 `config.toml` 只给 `brief:dry` 用，不开 Discord / Telegram（`brief:dry` 不检查聊天渠道）。不要在本机跑 `pnpm start`：如果用了某个人的 bot token，就会和那个人的容器同时登录同一个 bot，消息收到两份回复、早报可能发两次；`app.lock` 拦不住，因为两边的 `data_dir` 不同。聊天功能在容器里验证。
+- **本地开发不连聊天渠道**：本机只跑 dry run（9.6 起用 tester 的配置），不开 Discord / Telegram（`brief:dry` 不检查聊天渠道）。不要在本机跑 `pnpm start`：如果用了某个人的 bot token，就会和那个人的容器同时登录同一个 bot，消息收到两份回复、早报可能发两次；`app.lock` 拦不住，因为两边的 `data_dir` 不同。聊天功能在 tester 的容器里验证（9.6）。
 
 #### 9.5 文档
 
 - README 第 16 节“多人使用”改写：目录结构、共用和个人各写什么、`add-user.sh`、怎么给新的人建 bot、所有人用同一个模型、定时错开几分钟（模型一次只处理一个请求）、怎么只重启某一个人（`docker compose restart <名字>`）、怎么看某个人的日志。
 - `data/README.md`、`.gitignore`、`.dockerignore` 加上 `users/`、`config.shared.toml`、`compose.override.yaml`。
 
+#### 9.6 测试用户 tester
+
+2026-11-09 决定：本机开发也用 `users/` 的结构，不再用根目录的 `config.toml` 和 `data/`。
+
+- **tester 是一个普通用户**：用 `add-user.sh tester` 建，有自己的个人配置、`.env`、数据目录、compose 服务和**单独的测试 bot**（不是谁正在用的 bot）。新的聊天功能先在 tester 的容器里试，没问题再重建其他人的容器。它也用来做阶段 9 剩下的验收（两个容器互不干扰、排队时间和内存占用）。
+- **新环境变量 `MORNING_BRIEF_DATA_DIR`**：覆盖 `paths.data_dir`，相对路径按项目根目录解析（和配置里的写法一样）。同一份 `users/tester/config.toml` 在容器里用默认的 `/app/data`，在本机指到 `users/tester/data`，配置文件里不写 `data_dir`。
+- **`pnpm dev:dry`**：设好 `MORNING_BRIEF_SHARED_CONFIG=config.shared.toml`、`MORNING_BRIEF_CONFIG=users/tester/config.toml`、`MORNING_BRIEF_DATA_DIR=users/tester/data` 后跑 dry run，读的是本机最新的代码，不用重新构建镜像。`brief:dry` 照旧读根目录的 `config.toml`（单文件模式还在，`config.example.toml` 保留）。
+- 本机的 dry run 和 tester 的容器同时用 `users/tester/data/` 没有问题：dry run 不拿 `app.lock`、不写归档。8.2 的 To Do 登录凭证会刷新换新，到时 dry run 只读不写回（实现 8.2 时确认）。
+- `dev:dry` 能正常跑以后，用户删掉根目录的 `config.toml`。
+- README 第 2 节、AGENTS.md 的本地开发说明改成 `dev:dry` 和 tester 的容器。
+
 **验收**：
 
-- 单元测试：没有 `MORNING_BRIEF_SHARED_CONFIG` 时行为不变；表逐键合并、个人优先、数组替换；个人配置里有 `[ollama]` 时报错；`extra_feeds` 追加在 `feeds` 后面（共用和单文件模式都行）；合并后照常校验（例如 `brief_count` 和 `select_count` 的关系按合并结果检查）；环境变量覆盖在合并之后。
+- 单元测试：没有 `MORNING_BRIEF_SHARED_CONFIG` 时行为不变；表逐键合并、个人优先、数组替换；个人配置里有 `[ollama]` 时报错；`extra_feeds` 追加在 `feeds` 后面（共用和单文件模式都行）；合并后照常校验（例如 `brief_count` 和 `select_count` 的关系按合并结果检查）；环境变量覆盖在合并之后；`MORNING_BRIEF_DATA_DIR` 覆盖 `data_dir`（相对路径按项目根目录）。
 - 脚本：`add-user.sh` 建出完整目录；名字不合法、已存在时报错且不改任何文件。
+- 实际运行（9.6）：`pnpm dev:dry` 用 tester 的配置生成早报；tester 的容器连上测试 bot，在测试 bot 里发 `/help`、`/brief` 正常，ivan 的 bot 收不到。
 - 实际运行：现在的用户迁移后照常收到早报，`/history`、`/schedule`、`/todo` 数据都在；加第二个用户，两个容器同时运行、各自连上自己的 bot，互相收不到对方的消息；两人定时错开几分钟，都按时收到；记下两个容器同时生成时的排队时间和内存占用。
 
-**进度（2026-11-06）**：9.1、9.2、9.3、9.5 和 ivan 的迁移已完成。剩下的验收（第二个用户、两个容器互不干扰、排队时间和内存占用）等加第二个人时做。
+**进度（2026-11-09）**：9.1–9.6 和 ivan 的迁移已完成；tester 的容器和测试 bot 在跑，用户在两个 bot 里试过。
+
+**两个容器同时生成的实测**（2026-11-09 22:17，Mac 64GB，qwen3:32b，`num_ctx` 16384，`OLLAMA_NUM_PARALLEL` 默认）：用户几乎同时给 ivan 和 tester 发 `/brief`。
+- 时间线：两个容器在 22:16:57 前后同时开始抓数据。tester（3 个源，候选不够没让模型挑）先拿到模型，22:17:49 发出，约 52 秒。ivan（44 个源）22:17:04 抓完，等 tester 写完才开始挑新闻（22:17:56 挑完），22:18:39 发出，约 100 秒；平时单独生成约 70 秒，**排队多等了约 45 秒**，正好是 tester 写早报的时间。
+- 容器内存：tester 83–91 MiB，ivan 126–181 MiB（抓 44 个源时涨了约 50 MiB），程序本身很省。
+- Ollama：模型常驻 22 GB（100% GPU），生成期间进程内存 21.9 → 22.7 GB。整机内存用到 62–63 GB，空闲只剩 0.5–1 GB，压缩内存约 4 GB。**内存才是瓶颈**：调高 `OLLAMA_NUM_PARALLEL` 会给每个并发多分一份上下文缓存，这台机器余量不多，不建议；人多时靠错开定时（每人间隔 2 分钟左右）。
 
 **以后再做**（不在这一阶段）：在聊天里改个人偏好（`/interests`、`/avoid`、`/feeds`），存在各自的 `data/` 里、覆盖配置文件里的值，像 `location.json` 一样，这样日常调整不用找管理员、不用重启；等有人需要时再做。
 

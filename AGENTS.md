@@ -24,7 +24,7 @@ pnpm typecheck
 
 After changing dependencies, `Dockerfile` or `compose.yaml`, also run `docker compose build template` and check the containers start (`docker compose up -d`, `docker compose logs <name>`). Each person's service lives in the gitignored `compose.override.yaml` (see README section 16).
 
-For anything touching data sources, the model or prompts, also run `pnpm brief:dry` against real data and read the output. Chat features are verified by the user in Discord; ask them to try specific commands.
+For anything touching data sources, the model or prompts, also run `pnpm brief:dry` against real data and read the output. Local development uses only `brief:dry` and the tests; the root `config.toml` has no chat channel, and `pnpm start` is never run locally (it would log in to the same bot as a running container). Chat features are verified by the user in Discord against their container (rebuild it first); ask them to try specific commands.
 
 ## Code layout
 

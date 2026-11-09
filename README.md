@@ -46,7 +46,7 @@ scripts/add-user.sh ivan        # 名字用小写字母、数字和 -
 
 `ollama.host` 保持 `http://localhost:11434` 就行：`compose.yaml` 用环境变量 `MORNING_BRIEF_OLLAMA_HOST` 把它换成 `http://host.docker.internal:11434`（容器访问 Mac 本机的地址）。
 
-不用 Docker、直接在本机跑（开发时 `pnpm start`、`pnpm brief:dry`）用的是单独一份 `config.toml`：`cp config.example.toml config.toml`，所有设置写在一起，数据在项目根目录的 `data/`。
+本机开发（不用 Docker）用的是单独一份 `config.toml`：`cp config.example.toml config.toml`，所有设置写在一起，数据在项目根目录的 `data/`。本机只跑 `pnpm brief:dry` 和测试，聊天渠道不用开（`brief:dry` 不检查），也**不要填任何人正在用的 bot token**；聊天功能在容器里试。不要在本机跑 `pnpm start`：用了某个人的 token 时，它会和那个人的容器同时登录同一个机器人，每句话收到两份回复，早报也可能发两次，`app.lock` 拦不住（两边的数据目录不同）。
 
 ## 3. 创建聊天机器人
 
@@ -162,11 +162,11 @@ Mac 睡过了某个定时，醒来后在补发窗口（`catch_up_hours`）内仍
 ## 9. 历史早报
 
 - 在聊天里发 `/history` 看最近有早报的日期，`/history 11-02` 或 `/history 昨天` 看那天的早报。
-- 文件在 `data/archive/日期/` 下：
+- 文件在 `users/<名字>/data/archive/日期/` 下：
   - 定时早报：`brief-scheduled-0800.md`（`0800` 是定时的时间）；
   - 手动早报（`/brief`、`--once`）：`brief-manual-093015.md`（生成时的时分秒）；
   - 每份早报旁边有同名的 `raw-*.json`（各数据源的原始数据、新闻挑选结果）和 `input-*.txt`（发给模型的完整提示词和数据）。
-- `.md` 文件开头有 YAML 属性，可以直接用 Obsidian 打开 `data/archive/` 浏览。
+- `.md` 文件开头有 YAML 属性，可以直接用 Obsidian 打开 `users/<名字>/data/archive/` 浏览。
 - `archive.retention_days`（默认 90）：超过天数的归档在发送定时早报后删除；`0` 表示永久保留。
 
 ## 10. 新闻来源
@@ -225,6 +225,7 @@ Mac 留在家里无人照看时：
 
 ## 13. 常见问题
 
+- **每句话收到两份回复，或者早报发了两次**：有两个程序登录了同一个机器人。通常是本机 `pnpm start` 用了容器里某个人的 token，或者两个人的 `.env` 填了同一个 token。停掉本机的程序或换成各自的机器人。
 - **日志说 `app.lock 属于另一台机器或容器`，或“另一个实例正在运行”**：同一个数据目录只能有一个程序在跑。通常是两个服务挂了同一个 `users/<名字>/data/`，或者容器在运行时又在本机用同一个目录 `pnpm start`。停掉其中一个。如果确认都已经停了，删掉那个目录里的 `app.lock` 再启动。`brief:dry` 和 `--once` 不受影响，可以和常驻的程序同时用。
 - **Telegram 返回 409**：同一个 bot token 有两个程序在收消息，停掉一个。
 - **容器连不上 Ollama**：在 Mac 上运行 `curl http://localhost:11434/api/version`，没有返回就是 Ollama 没开；返回了就检查 `ollama.model` 和 `ollama list` 是否一致。
@@ -240,7 +241,7 @@ Mac 留在家里无人照看时：
 
 ## 15. 数据和备份
 
-每个人的数据都在 `users/<名字>/data/`（容器里的 `/app/data`，`paths.data_dir` 的默认值），每个文件的作用见 [`data/README.md`](data/README.md)。迁移时复制 `config.shared.toml` 和整个 `users/` 即可。
+每个人的数据都在 `users/<名字>/data/`（容器里的 `/app/data`，`paths.data_dir` 的默认值），每个文件的作用见 [`data/README.md`](data/README.md)。迁移时复制 `config.shared.toml` 和整个 `users/` 即可。待办文件是 `users/<名字>/data/todo.md`，想用 Obsidian 编辑就打开这个文件。
 
 - **Mac 上**：Time Machine 会备份项目目录，包括 `users/`。
 - **服务器上**：用云盘快照，或者每天用 `restic`（或 `rclone`）把 `data/` 加密备份到对象存储。例如 crontab：
@@ -347,7 +348,7 @@ node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）�
 
 ### brief:dry
 
-`brief:dry` 不连接任何聊天渠道，所以 `config.toml` 里的 token 可以先不填（保留示例值），渠道也可以都不开。它只打印，不写归档；但待办文件不存在时会创建它。
+`brief:dry` 不连接任何聊天渠道，所以 `config.toml` 里的 token 可以不填，渠道也可以都不开；本机开发就这样用（见第 2 节）。它只打印，不写归档；但待办文件不存在时会创建它。
 
 ### 聊天渠道
 

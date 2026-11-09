@@ -41,21 +41,23 @@ my-morning-brief/
 │   ├── index.ts                # 入口：解析命令行参数，交给 app/
 │   ├── app/                    # 三种运行方式：start.ts、once.ts（brief:once）、dry.ts（brief:dry），setup.ts 是共用的启动准备
 │   ├── infra/                  # 基础设施，和业务无关
-│   │   ├── config/             #   schema.ts（zod 校验）、load.ts（读文件、环境变量覆盖）、parse.ts、paths.ts、secrets.ts
+│   │   ├── config/             #   schema.ts（zod 校验）、load.ts（读文件、环境变量覆盖）、merge.ts（共用和个人配置合并，阶段 9）、parse.ts、paths.ts、secrets.ts
 │   │   ├── logger.ts           #   带时间戳的日志，统一脱敏 token 和日历链接
 │   │   ├── fs.ts               #   writeFileAtomic、data_dir 初始化、临时文件清理
+│   │   ├── text.ts             #   识别和处理文字里的域名（looksLikeDomain、stripDomains、defuseDomains）
 │   │   └── lock.ts             #   单实例锁 app.lock
 │   ├── location/               # effective.ts（当前生效的时区和位置，location.json 覆盖 config）、geocoding.ts（城市查询）
 │   ├── schedules/              # 定时本身：store.ts（data/schedules.json）、rules.ts（解析、校验冲突）、windows.ts（发送窗口、dueSchedule、下一次）
 │   ├── sources/                # 数据源
 │   │   ├── weather/            #   fetch.ts（Open-Meteo）、codes.ts（天气代码、紫外线等级）、format.ts、types.ts
 │   │   ├── calendar/           #   fetch.ts、expand.ts（展开重复日程、时区修正）、format.ts、types.ts
-│   │   ├── todos/              #   store.ts（读写 Markdown 待办文件）、source.ts
+│   │   ├── todos/              #   store.ts（读写 Markdown 待办文件）、ms-todo.ts 和 ms-auth.ts（阶段 8.2：Microsoft To Do，只读，设备码登录）、source.ts
 │   │   ├── news/               #   fetch.ts（RSS/Atom）、clean.ts（摘要清理、链接规范化）、format.ts（编号）、types.ts
 │   │   ├── gather.ts           #   汇总成一段给模型看的文本（<数据> 标记）
 │   │   └── common.ts           #   SourceResult、fetchOk、describeError
 │   ├── llm/
-│   │   ├── prompts.ts          #   早报和对话的提示词
+│   │   ├── prompts.ts          #   早报、对话和挑选新闻的提示词
+│   │   ├── pick-news.ts        #   挑选新闻的模型输入（编号、来源、标题）和回复解析（阶段 8.1）
 │   │   ├── ollama.ts           #   Ollama 客户端、启动检查
 │   │   ├── service.ts          #   请求排队、写早报、回答问题、输入长度控制
 │   │   ├── sanitize.ts         #   输出清理、新闻编号换成链接
@@ -64,7 +66,7 @@ my-morning-brief/
 │   ├── brief/                  # 早报业务
 │   │   ├── run.ts              #   runBrief：早报完整流程，定时器、/brief、brief:once、brief:dry 共用
 │   │   ├── data-sources.ts     #   Sources 接口（测试里可以替换）
-│   │   ├── select-news.ts      #   新闻跨天去重和挑选（第一批按源轮流，第二批加模型按兴趣筛选）
+│   │   ├── select-news.ts      #   新闻跨天去重、按源轮流组成候选池、交给模型按兴趣挑选（阶段 8.1）
 │   │   └── fallback.ts         #   不经过模型的降级早报
 │   ├── chat/
 │   │   ├── channel.ts          #   Channel 接口、多渠道发送；早报和定时器只通过它发送
@@ -76,11 +78,16 @@ my-morning-brief/
 │   │   └── discord/            #   adapter.ts（discord.js，只处理私信）、slash-commands.ts、format.ts
 │   └── scheduler/              # 按时运行：scheduler.ts（轮询、重试、降级、重发）、state.ts（state.json）、prompt.ts（首次设置提醒）、keep-awake.ts（caffeinate）
 ├── test/                       # 测试共用的 helpers.ts 和 fixtures/（示例 .ics、RSS、天气和城市查询 JSON）；测试本身在 src/ 里
-├── config.example.toml
-├── data/                       # 程序产生的数据（paths.data_dir 的默认值），不提交 git
+├── config.example.toml         # 单个配置文件的模板（本机跑 brief:dry 用）
+├── config.shared.example.toml  # 阶段 9：共用配置模板；真正的 config.shared.toml 不提交 git
+├── config.user.example.toml    # 阶段 9：个人配置模板，add-user.sh 复制到 users/<名字>/config.toml
+├── user.env.example            # 阶段 9：个人密钥模板，add-user.sh 复制到 users/<名字>/.env
+├── users/                      # 阶段 9：每人一个目录（config.toml、.env、data/），整个不提交 git
+├── scripts/add-user.sh         # 阶段 9：加一个人（建目录、加 compose 服务）
+├── data/                       # 程序产生的数据（paths.data_dir 的默认值，本机运行时用），不提交 git
 ├── todo.example.md             # 待办文件示例；真正的 todo.md 在 data/ 下
 ├── Dockerfile                  # 阶段 7：镜像（node:24-slim，tsx 运行，非 root）
-├── compose.yaml                # 阶段 7：单人部署，挂载 config.toml 和 data/
+├── compose.yaml                # 阶段 9：只有共用的模板服务 template；每人的服务在 compose.override.yaml（不提交 git）
 ├── .dockerignore
 ├── package.json
 ├── tsconfig.json
@@ -95,7 +102,7 @@ my-morning-brief/
 - 文件和目录名用小写短横线（kebab-case），例如 `select-news.ts`、`chat-core.ts`。
 - 单元测试放在被测文件旁边，一个源文件对应一个测试文件，例如 `src/llm/sanitize.ts` 和 `src/llm/sanitize.test.ts`。测试可以直接引用别的模块内部的文件，方便单独测一个函数（模块边界规则对 `*.test.ts` 放宽这一条，依赖方向照样检查）。
 
-程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`schedules.json`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
+程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`schedules.json`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里，每个人是 `users/<名字>/data/`（阶段 9），根目录的 `data/` 只在本机跑 `brief:dry` 时用。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
 
 `package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但不算任何一个定时，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
 
@@ -156,6 +163,7 @@ select_timeout_seconds = 120  # 模型筛选新闻的超时，超时直接走按
 brief_count = 10              # 阶段 8.1 新增：早报里写几条新闻，由模型从候选池里挑；不写时取 10 和 select_count 中小的那个
 
 [todo]
+backend = "markdown"   # 阶段 8.2 新增："markdown"（下面的 todo.md）或 "ms_todo"（Microsoft To Do，只读，见 8.2）
 file = "todo.md"   # 相对路径按 data_dir 解析，支持 ~ 和绝对路径
 
 [archive]
@@ -338,6 +346,7 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 | `/todo` | 列出未完成待办 |
 | `/add 内容` | 添加待办；内容为空时提示用法 |
 | `/done 序号` | 完成待办，回复“已完成：<内容>”；序号无效时提示“先用 /todo 看看列表” |
+| `/todo_login` | 阶段 8.2 新增：登录 Microsoft To Do（`backend = "ms_todo"` 时） |
 | `/refresh` | 强制重新抓取今天的天气、日程和待办（不重新挑选新闻，见下面“普通文字消息”） |
 | `/history` | 列出最近 14 天有归档的日期 |
 | `/history 日期` | 重新发送那天的早报，日期支持 `2026-11-02`、`11-02`、`昨天`、`前天` |
@@ -454,6 +463,8 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 #### 阶段 7：Docker 部署和文档
 
+> 部署方式在阶段 9 改为一人一个服务（`users/<名字>/`、`compose.override.yaml`），下面是阶段 7 当时的单人做法，留作记录；现在怎么部署看阶段 9 和 README 第 16 节。
+
 2026-11-04 改为用 Docker 常驻运行，不做 launchd 开机自启：以后要一人一个容器（见第 7 节“多用户部署”），现在先在这台 Mac 的 Docker Desktop 上跑一个人。Ollama 继续在 Mac 本机运行（Docker Desktop 用不了 Metal GPU）。
 
 - **`Dockerfile`**：
@@ -569,15 +580,46 @@ README：
 - 单元测试：候选不多于 `brief_count` 时不调用模型；`interests` 和 `avoid` 为空时也调用；筛选请求里不含摘要和链接、用 `select_timeout_seconds`；解析时忽略不存在和重复的编号、多了截断、少于一半视为失败、不满时按轮流顺序补满；模型失败或超时时退回轮流的前 `brief_count` 条且早报照常生成；入选条目按模型顺序重新编号为 `N1`…；归档记录挑选方式和候选数；`brief_count > select_count` 时配置报错。
 - 人工检查：用真实的 44 个源跑 `brief:dry` 至少 3 次，确认入选的新闻分布在候选的前中后各段、覆盖多个地区，不再集中在前十几条；早报写满 `brief_count` 条；记下筛选和整次运行的耗时。如果筛选也明显偏向靠前的候选，再考虑把候选顺序按日期打乱后交给模型。
 
-#### 8.2 待办截止日期
+#### 8.2 待办接 Microsoft To Do（只读）
 
-- 兼容 Obsidian Tasks 插件的 `📅 2026-11-05` 写法。解析出日期后，给模型的文本写成“交水费（截止 11月5日，还有 3 天）”或“（已过期 2 天）”；有截止日期的排在前面，按日期排序。`/todo` 列表显示同样的信息，序号按排序后的列表。
-- `completeTodo` 按 Tasks 插件的习惯在行尾追加 `✅ 2026-11-02`（当前生效时区的今天）。`/add` 不解析日期，原样写入。
-- 第一版不支持重复任务：`/done` 遇到带 `🔁` 的行时不改文件，回复“这是重复任务，请在 Obsidian 里完成，它会自动生成下一次”。其他 Tasks 标记（`⏳`、`🛫`、`⏫` 等）不解析，原样保留在文本里。
-- 早报提示词第 4 条改为“已过期和快到截止日期的优先”。
-- README 补充 `📅` 写法的说明。
+2026-11-06 决定：待办只存一个地方（single source of truth）。选了 Microsoft To Do 的人，增删改都在 To Do App 里做，机器人**只读**：早报和聊天读它，`/todo` 列出它。不做双向同步（冲突、重复、删除都很难处理）。原来计划的 `todo.md` 截止日期（`📅` 写法）挪到第 7 节。
 
-**验收**：截止日期解析、过期、排序、`/done` 序号和排序后的列表一致、完成时追加 `✅` 日期、带 `🔁` 的待办不被修改并给出提示、没有截止日期的待办行为不变。
+- **后端接口**：个人配置 `[todo] backend = "markdown" | "ms_todo"`，默认 `markdown`（现在的 `todo.md`，行为不变；不用微软账号的人继续用它）。`sources/todos/` 定义 `TodoBackend`：都提供 `list`，可写的后端另外提供 `add`、`complete`。待办统一成 `Todo = { title, due: 'YYYY-MM-DD' | null, important: boolean, list: string | null }`；markdown 后端的 `due` 为 `null`、`important` 为 `false`。
+- **配置**：
+  ```toml
+  # config.shared.toml：所有人共用一个应用注册
+  [microsoft]
+  client_id = ""      # Azure 应用注册的“应用程序（客户端）ID”。公共客户端没有密钥，这个 id 不是机密
+
+  # users/<名字>/config.toml
+  [todo]
+  backend = "ms_todo"
+  lists = ["Tasks"]   # 读哪些列表；不写时读默认列表（wellknownListName = defaultList）
+  ```
+  `backend = "ms_todo"` 但 `client_id` 为空时，配置校验报错（错误信息写明两个文件）。`[todo] file` 只对 markdown 有效。
+- **应用注册**（README 写步骤，用户自己操作，免费）：在 Azure 门户注册应用，账户类型选“仅个人 Microsoft 账户”，打开“允许公共客户端流”，委托权限 `Tasks.Read` 和 `offline_access`。只申请读权限，机器人改不了你的待办。
+- **登录 `/todo_login`**（设备码流程）：
+  1. 向 `https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode` 申请设备码，回复“打开 <网址>，输入 <验证码>，15 分钟内有效”。验证码一次性、短时有效，只能用来完成这次登录，所以可以发在私信里；`device_code` 不发、不写日志。
+  2. 后台按返回的 `interval` 轮询 token 接口，直到成功、被拒绝或过期。同一时间只有一个登录；重复发 `/todo_login` 时回复“上一个登录还在等待”。成功后回复“已连接 Microsoft To Do，读到 N 条未完成待办”；失败回复中文原因。
+  3. refresh token 存在 `data_dir/ms-token.json`（`writeFileAtomic`，权限 600），因为每次刷新都会换新的，不能放 `.env`。读到后注册到 logger 脱敏。access token 只在内存里，过期前刷新。
+  4. backend 不是 `ms_todo` 时，`/todo_login` 回复怎么改配置。
+- **读取**：`GET /me/todo/lists` 按名字找列表，再 `GET /me/todo/lists/{id}/tasks?$filter=status ne 'completed'`，跟着 `@odata.nextLink` 翻页，每个列表最多 100 条，请求有超时。
+  - 列表名找不到时不在启动时报错（那时可能还没登录、网络也可能不通），而是待办部分写“（待办获取失败：找不到列表 X，现有列表：A、B）”。
+  - 截止日期：To Do 只有日期没有时间，`dueDateTime` 只取日期部分。返回的时区字段怎么换算，实现时用真实数据确认后再定，并写进 README 设计说明。
+  - 重要：`importance == "high"`（App 里的星标）。
+  - 备注、提醒时间、子步骤不读；重复任务照常显示当前这一次。
+- **格式**（纯函数，测试在两个 TZ 下跑）：按当前生效时区算天数，写成“交水费（截止 11月5日，还有 3 天）”“（今天截止）”“（已过期 2 天）”，标了重要的加“⭐”。排序：已过期和有截止日期的按日期在前，然后是重要的，然后其余；同组内保持 To Do 里的顺序。读多个列表时加列表名。早报、聊天上下文和 `/todo` 用同一个格式；ms_todo 的 `/todo` 不显示序号（不能用序号完成）。
+- **早报提示词**第 4 条改为“已过期、今天截止和标了重要的优先”（stage 3 引用的提示词同步改；markdown 后端没有这些信息时这句话也不冲突）。
+- **只读的命令**：ms_todo 时 `/add`、`/done` 仍然注册，回复“待办在 Microsoft To Do 里管理，请在 App 里修改；用 /todo 看当前列表”。`/help` 按后端写不同的说明。
+- **缓存**：早报和聊天上下文沿用 30 分钟的数据缓存；`/todo` 每次直接读 To Do，在 App 里改完马上能看到；`/refresh` 照常清缓存。
+- **失败**：没登录、refresh token 失效（长期不用会过期，或者用户在账户设置里撤销了授权）、网络失败、429 限流，都只影响待办部分：“（待办获取失败：……）”，授权问题加上“用 /todo_login 重新登录”，早报照常发出。不重试，早报不等。
+- **迁移**：现有 `todo.md` 里的条目由用户手动搬到 To Do。切到 ms_todo 后不再读 `todo.md`，也不删除它。
+- **隐私**：待办本来就存在微软的服务器上；模型仍在本机，待办只发给本地模型。
+- **多用户**：所有人共用一个 `client_id`，各自 `/todo_login`，token 在各自的 `data_dir`。
+
+**验收**：
+- 单元测试（网络全部 mock）：设备码登录成功、被拒绝、过期、重复发起；刷新 token 并原子写回；refresh token 失效时提示重新登录；按名字找列表、找不到时列出现有列表、翻页；截止日期天数（两个 TZ、跨午夜、过期 / 今天 / 以后）、排序、重要标记、多列表；ms_todo 时 `/add`、`/done` 的提示；配置校验（ms_todo 缺 `client_id`）；日志里不出现任何 token。markdown 后端的现有测试不变。
+- 实际运行（用户在 Discord 里试）：注册应用并 `/todo_login`；在手机 App 里加一条带截止日期、标了重要的待办，`/todo` 马上看到；`/brief` 的待办部分按优先级写；重启容器后仍是登录状态；在账户设置里撤销授权后，早报写“待办获取失败”并提示重新登录。
 
 #### 8.3 健康检查
 
@@ -662,15 +704,23 @@ users/                    # 整个 gitignore
 #### 9.3 compose 和加人
 
 - 要求：仓库里跟踪的文件不出现具体的用户名；加一个人不改跟踪的文件；每个人的服务只写名字、hostname、`env_file` 和挂载，其他设置（镜像、重启策略、Ollama 地址、退出等待、日志）共用一份。
-- 做法实现时实测后定：优先用 gitignore 的 `compose.override.yaml`（`docker compose` 自动读取）里每人一个服务，用 `extends` 继承 `compose.yaml` 里的模板服务；如果模板服务没法不启动，或者 `extends` 的合并行为不对，就改为脚本生成。
-- `scripts/add-user.sh <名字>`：建 `users/<名字>/data/`，复制 `config.user.example.toml` 和 `.env.example`，加好这个人的 compose 服务（或者打印出来让人贴进去），最后提示还要做的事：建 Discord bot、填 `.env`、`docker compose up -d <名字>`、私信机器人拿用户 id。名字只能是小写字母、数字和 `-`，已存在时报错退出，不覆盖。
+- 做法（2026-11-05 实测，Docker Compose v5.5）：
+  - `compose.yaml` 只有一个模板服务 `template`，写共用的设置（构建、镜像名 `morning-brief`、重启策略、Ollama 地址、`MORNING_BRIEF_SHARED_CONFIG`、挂载 `config.shared.toml`、退出等待、日志）。它带 `profiles: [template]`，所以 `docker compose up -d` 不会启动它。
+  - 每个人的服务写在 gitignore 的 `compose.override.yaml`（`docker compose` 自动读取）里，用 `extends` 继承模板。`extends` 会连 `profiles` 一起继承，所以要用 `profiles: !reset []` 清掉，否则这个人的服务也不启动；再用 `build: !reset null` 清掉构建设置，所有人共用一个镜像，不各自构建。
+  - 构建镜像用 `docker compose build template`。
+  - 改了某个人的 `.env` 要 `docker compose up -d <名字>`，`restart` 不会重新读 `.env`。
+- `scripts/add-user.sh <名字>`：建 `users/<名字>/data/`，复制 `config.user.example.toml` 和 `user.env.example`（`.env` 权限 600），把这个人的服务追加到 `compose.override.yaml`（文件不存在时新建），最后提示还要做的事：建 Discord bot、填 `.env`、`docker compose up -d <名字>`、私信机器人拿用户 id、错开定时。名字只能是小写字母、数字和 `-`，`template` 是保留名字；目录或服务已存在时报错退出，不改任何文件。
 - 每个服务的 `hostname` 固定为 `morning-brief-<名字>`，这样重启后 `app.lock` 认得出是自己。
 
 #### 9.4 把现在的单人部署迁过去
 
 - 现在的用户（根目录的 `config.toml` 和 `data/`）也迁到 `users/<名字>/`，全部用同一种结构，不留两种部署方式并存。
-- 步骤（README 写成清单，迁移时由用户确认后执行）：`docker compose down` → 从 `config.toml` 拆出 `config.shared.toml` 和 `users/<名字>/config.toml`、`.env` → 把 `data/` 里的文件（除了跟踪的 `data/README.md`）移到 `users/<名字>/data/` → 启动 → 检查 `/history`、`/schedule`、`/todo` 都还在。
-- 迁移前先备份 `data/`。
+- **2026-11-05 已迁移**（ivan）。只有这一次需要迁移，以后新加的人直接用新结构，所以 README 不写迁移清单。当时的做法：
+  - 先备份 `data/` 到 `~/morning-brief-data-2026-11-05.tgz`（权限 600）。
+  - `docker compose down` → 拆出 `config.shared.toml` 和 `users/ivan/config.toml`、`.env` → 把 `data/` 里的文件（除了跟踪的 `data/README.md`）移到 `users/ivan/data/` → `add-user.sh` 同样的服务写进 `compose.override.yaml` → 启动 → 用户检查了 `/schedule`、`/todo`、`/history`、`/brief`。
+  - 订阅源放在个人配置里（个人的 `feeds` 整个替换共用的），共用配置只留 3 个默认源，给新加的人做起点。
+  - 合并后的配置和迁移前逐项比较过，除了占位的 Telegram token 以外完全一样。
+- **本地开发不连聊天渠道**：根目录的 `config.toml` 只给 `brief:dry` 用，不开 Discord / Telegram（`brief:dry` 不检查聊天渠道）。不要在本机跑 `pnpm start`：如果用了某个人的 bot token，就会和那个人的容器同时登录同一个 bot，消息收到两份回复、早报可能发两次；`app.lock` 拦不住，因为两边的 `data_dir` 不同。聊天功能在容器里验证。
 
 #### 9.5 文档
 
@@ -681,7 +731,9 @@ users/                    # 整个 gitignore
 
 - 单元测试：没有 `MORNING_BRIEF_SHARED_CONFIG` 时行为不变；表逐键合并、个人优先、数组替换；个人配置里有 `[ollama]` 时报错；`extra_feeds` 追加在 `feeds` 后面（共用和单文件模式都行）；合并后照常校验（例如 `brief_count` 和 `select_count` 的关系按合并结果检查）；环境变量覆盖在合并之后。
 - 脚本：`add-user.sh` 建出完整目录；名字不合法、已存在时报错且不改任何文件。
-- 实际运行：现在的用户迁移后照常收到早报，`/history`、`/schedule`、`/todo` 数据都在；加第二个用户，两个容器同时运行、各自连上自己的 bot，互相收不到对方的消息；两人定时错开几分钟，都按时收到；记下两个容器同时生成时的排队时间和内存占用（第 7 节“还要做的事”）。
+- 实际运行：现在的用户迁移后照常收到早报，`/history`、`/schedule`、`/todo` 数据都在；加第二个用户，两个容器同时运行、各自连上自己的 bot，互相收不到对方的消息；两人定时错开几分钟，都按时收到；记下两个容器同时生成时的排队时间和内存占用。
+
+**进度（2026-11-06）**：9.1、9.2、9.3、9.5 和 ivan 的迁移已完成。剩下的验收（第二个用户、两个容器互不干扰、排队时间和内存占用）等加第二个人时做。
 
 **以后再做**（不在这一阶段）：在聊天里改个人偏好（`/interests`、`/avoid`、`/feeds`），存在各自的 `data/` 里、覆盖配置文件里的值，像 `location.json` 一样，这样日常调整不用找管理员、不用重启；等有人需要时再做。
 
@@ -708,13 +760,13 @@ users/                    # 整个 gitignore
 以后要迁移到云服务器（Linux、Docker），这次实现时就要遵守：
 
 - **不依赖系统时区**：所有日期时间都通过 luxon 按当前生效时区计算，不能用 `new Date().getHours()`、`toLocaleString()` 这类依赖系统时区的写法。测试用 `TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍（`package.json` 里的 `test` 脚本直接这样做）。
-- **路径都可配置**：状态、位置、归档、日志、待办都放在 `paths.data_dir` 下，代码里不写死项目目录或 `~`。配置文件路径可以用环境变量 `MORNING_BRIEF_CONFIG` 指定。
+- **路径都可配置**：状态、位置、归档、日志、待办都放在 `paths.data_dir` 下，代码里不写死项目目录或 `~`。配置文件路径可以用环境变量 `MORNING_BRIEF_CONFIG` 指定；多人部署时再用 `MORNING_BRIEF_SHARED_CONFIG` 指向共用配置，两份合并（阶段 9.1）。
 - **密钥可以走环境变量**：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`、`DISCORD_BOT_TOKEN`、`DISCORD_USER_ID` 等环境变量优先于 config.toml，方便在服务器上用 secret 管理，不把 token 写进镜像。
 - **日志写到 stdout/stderr**：程序本身不写日志文件，由运行环境收集（Docker 收集，`docker compose logs` 查看）。
 - **macOS 专属的东西隔离开**：`caffeinate`、`pmset` 说明只出现在各自的位置，并且按平台判断，主流程不依赖它们。
 - **模型调用走接口**：`llm/` 里的 `LlmClient` 接口，这次只实现 Ollama 版本。以后换成别的推理后端时只需要加一个实现，不改其他代码。
 - **优雅退出**：收到 SIGTERM/SIGINT 时停止长轮询、等当前的模型请求和文件写入完成（最多 30 秒）再退出。服务器和容器重启时会发这个信号。
-- **同一时间只跑一个实例**：迁移时先停掉 Mac 上的容器（`docker compose down`），否则两边都会长轮询导致 409，还可能各发一份早报。`data_dir/app.lock` 只能防住同一个数据目录上的第二个实例（包括共用 `data/` 的容器和本机进程），防不住两台机器各用一份数据目录各跑一个。
+- **同一时间只跑一个实例**：迁移时先停掉 Mac 上的容器（`docker compose down`），否则两边都会长轮询导致 409，还可能各发一份早报。`data_dir/app.lock` 只能防住同一个数据目录上的第二个实例，防不住两份数据目录各跑一个（两台机器，或者本机 `pnpm start` 和容器用了同一个 bot token，见阶段 9.4“本地开发不连聊天渠道”）。
 - **一个实例只服务一个人**：所有状态（数据目录、对话记忆、模型请求队列、锁）都按实例隔离，不要引入跨实例共享的全局状态或固定路径，这样以后可以一人一个容器（见第 7 节“多用户部署”）。
 
 ### 数据持久化
@@ -730,8 +782,9 @@ users/                    # 整个 gitignore
 ## 7. 以后可以做的（这三批都不做）
 
 - **待办助手和艾森豪威尔矩阵**（2026-11-05 讨论）。目标是用自然语言管理待办（“提醒我明天交水费”），并按艾森豪威尔矩阵（重要 × 紧急，四个象限）给待办分类。按顺序分步做，每步都可以单独用：
-  1. **截止日期**：先做阶段 8.2。紧急程度由截止日期决定，没有日期就无从谈起。
-  2. **工具调用（tool calling）**：聊天时把 `addTodo`、`completeTodo`、`listTodos` 作为工具交给模型（Qwen 系列支持工具调用），“明天”“下周五”按当前生效时区换算成 `📅` 日期。**做之前必须先处理提示注入**：日历邀请和 RSS 里的文字可能诱导模型调用工具。至少要做到：只有用户本人消息触发的对话才能调用工具（生成早报时不提供工具），并且有写操作的工具调用要先发给用户确认（Telegram / Discord 按钮）再执行。
+  - **2026-11-06 更新**：用 Microsoft To Do 的人（阶段 8.2），待办只在 To Do 里改，机器人只读。所以下面第 2 步只适用于 markdown 后端；第 3 步的“重要”直接用 To Do 的星标（用户自己标），不需要模型判断，“紧急”照样由截止日期算。
+  1. **截止日期**：Microsoft To Do 自带（阶段 8.2）。markdown 后端要先做下面的“`todo.md` 的截止日期”。紧急程度由截止日期决定，没有日期就无从谈起。
+  2. **工具调用（tool calling）**（只适用于 markdown 后端）：聊天时把 `addTodo`、`completeTodo`、`listTodos` 作为工具交给模型（Qwen 系列支持工具调用），“明天”“下周五”按当前生效时区换算成 `📅` 日期。**做之前必须先处理提示注入**：日历邀请和 RSS 里的文字可能诱导模型调用工具。至少要做到：只有用户本人消息触发的对话才能调用工具（生成早报时不提供工具），并且有写操作的工具调用要先发给用户确认（Telegram / Discord 按钮）再执行。
   3. **艾森豪威尔矩阵**：
      - 紧急程度用代码算（纯函数、可测试）：已过期或若干天内到期算紧急，天数可配置；没有截止日期算不紧急。
      - 重要程度需要判断，由本地模型给建议、用户确认，不自动决定。模型参考用户写的长期目标或重点（类似新闻的 `interests`），返回结构化结果（Ollama 结构化输出，JSON schema：象限 + 一句理由）。
@@ -740,6 +793,7 @@ users/                    # 整个 gitignore
      - 早报的待办部分按象限写：列出第 1 象限（重要且紧急），再提一条本周该推进的第 2 象限（重要不紧急）。
   4. **拆成待办 sub-agent**：第 2、3 步先放在聊天的同一个模型里做。等待办逻辑多到主对话的提示词装不下（分类、拆分任务、每周回顾、提醒第 2 象限别拖着等），再拆成单独的 sub-agent：主对话判断和待办有关时转给它，它有自己的提示词、工具和上下文（完整待办列表和目标）。工具本身不用改，只是换个调用的地方。代价是多一次模型调用（本地 32b 约多 10–30 秒）和路由可能判断错。
   - **只用本地模型**：考察过 TypeSafe 的 Jev（专门做分类和打分、带置信度的决策模型，很适合象限分类），但它只有云端 API、没有公开权重，待办会离开本机，所以不用。第三方的 Jev 兼容本地服务（Ollaya、Ollajev）跑的是别的开源模型，项目还很新，Ollajev 的部分模型会执行模型仓库里的代码，也不用。以后出现成熟的本地决策模型，再给分类接口加一个实现。
+- **`todo.md` 的截止日期**（原阶段 8.2，2026-11-06 因改用 Microsoft To Do 挪到这里）：兼容 Obsidian Tasks 插件的 `📅 2026-11-05` 写法，解析成 8.2 的 `Todo.due`，格式和排序直接复用 8.2；`/done` 在行尾追加 `✅ 日期`；带 `🔁` 的重复任务不修改、提示去 Obsidian 里完成；其他 Tasks 标记原样保留。等有人用 markdown 后端又需要截止日期时再做。
 - 语音消息：用本地 Whisper 转文字。
 - 晚间回顾：每天晚上总结完成了哪些待办，提醒明天的日程。
 - **在 Discord 服务器频道里使用**（2026-11-05 提出）：现在只能私信（只申请了 `DirectMessages`、`dispatch` 忽略非私聊、slash 命令限定 `BotDM`），因为早报含日程、待办和位置。想在自己服务器的私密频道里用时：
@@ -763,14 +817,14 @@ users/                    # 整个 gitignore
   - X 平台：不接。官方 API 读取要付费，Nitter 和 RSSHub 的 X 路由需要真实账号 cookie，违反使用条款且不稳定。如果以后某个只在 X 上发的账号确实重要，再考虑用官方 API 加一种 `type = "x"` 的源。
 - **根据反馈学习新闻偏好**（依赖阶段 8.1）：早报里每条新闻后加 👍/👎 按钮（Telegram inline keyboard / Discord 按钮），反馈连同标题、来源记到 `data_dir/feedback.jsonl`（追加写入）。每周让模型根据反馈总结出新的 `interests`/`avoid` 建议，发给用户，用户点“采用”后才写入。学到的偏好单独存在 `data_dir/preferences.toml`，和手写的配置合并使用，不改 `config.toml`。
 - **多用户部署：一人一个容器，共用一个 Ollama**（2026-11-04 讨论；配置怎么管见阶段 9）。现在的设计不用改代码就能这样跑，要补的是部署文件和说明：
-  - **结构**：每个用户一个容器，各自挂一个数据卷到容器里的 `data/`（`data_dir` 的默认值，例如 `/app/data`），各自一份 `config.toml`（用 `MORNING_BRIEF_CONFIG` 指向挂进来的文件），token 和用户 id 用环境变量。所有容器的 `ollama.host` 指向同一个 Ollama。
+  - **结构**（阶段 9 已实现）：每个用户一个容器，挂 `users/<名字>/data/` 到容器里的 `/app/data`，共用的 `config.shared.toml` 加个人的 `users/<名字>/config.toml` 合并，token 和用户 id 放各自的 `.env`。所有容器连同一个 Ollama。
   - **每个用户要有自己的 bot token**：Telegram 同一个 token 只能一个进程长轮询（第二个 409）；Discord 允许多个连接，但每个容器都会收到所有人的私信再各自忽略，既浪费又容易出错。人多到一人一个 bot 管不过来时，再改成一个进程服务多个用户（按用户 id 分数据目录、对话记忆和 `/city` 位置），这是不小的重构，到时单独规划。
   - **Ollama 放在哪**：Mac 上的 Docker Desktop 用不了 GPU（Metal），所以 Ollama 在 Mac 本机运行，容器用 `http://host.docker.internal:11434` 连；Linux + NVIDIA 服务器上可以放进同一个 compose，用内部网络连（`http://ollama:11434`）。Ollama 没有身份验证，**不要把 11434 端口暴露到公网**。
   - **模型排队**：每个实例内部本来就一次只发一个请求，多个容器的请求在 Ollama 那边排队。qwen3:32b 一份早报约 25 秒，8 个人都在 08:00 会让最后一个人等 3–4 分钟。办法：各人的定时（`/schedule`）错开几分钟；或者调高 Ollama 的 `OLLAMA_NUM_PARALLEL`（64GB 内存跑 32B 模型、16k 上下文，2–3 个并发应该可以，但单个请求会变慢，要实测）。排队时间也算在 `timeout_seconds` 里，人多时调大。
   - **所有容器用同一个模型名和相同的 `num_ctx`**：模型名不同或 `num_ctx` 不同，Ollama 会反复卸载、重新加载模型，非常慢。`keep_alive` 按最长的设置。
-  - **待办和 Obsidian**：`todo.md` 在容器的数据卷里；想用 Obsidian 编辑，要把那个文件挂进容器，或者只通过机器人管理。
-  - **已经做了**（阶段 7）：`Dockerfile`、`.dockerignore`、单人的 `compose.yaml`、README 里怎么加第二个人。
-  - **还要做的事**：实测两三个容器同时生成早报的排队时间和内存占用；Linux + NVIDIA 服务器上把 Ollama 放进同一个 compose 的示例。
+  - **待办和 Obsidian**：`todo.md` 在容器的数据卷里；想用 Obsidian 编辑，要把那个文件挂进容器，或者只通过机器人管理。用 Microsoft To Do 后端（阶段 8.2）时没有这个问题。
+  - **已经做了**：`Dockerfile`、`.dockerignore`（阶段 7）；共用和个人配置、`users/` 目录、compose 模板服务和 `add-user.sh`、ivan 的迁移（阶段 9）。排队时间和内存占用的实测在阶段 9 的验收里。
+  - **还要做的事**：Linux + NVIDIA 服务器上把 Ollama 放进同一个 compose 的示例。
 - **部署到服务器**：用阶段 7 的 Docker 镜像（多用户时见上一条）。迁移前要先决定两件事：
   - **模型放在哪里**：（a）服务器只跑机器人和定时任务，通过 Tailscale 等私有网络调用家里 Mac 上的 Ollama（模型仍在本地，但 Mac 必须醒着；连不上时走降级早报）；（b）租带 GPU 的服务器自己跑 Ollama（数据不出自己的机器，但费用高）；（c）改用云端模型 API（便宜、稳定，但违背“推理完全在本机”的初衷，日程和待办会发给模型服务商）。
-  - **待办文件怎么同步**：服务器上的 `todo.md` 不再和本机 Obsidian 是同一个文件。可以只通过机器人管理待办，或者用 git、Syncthing 同步，需要处理两边同时修改的冲突。
+  - **待办文件怎么同步**：服务器上的 `todo.md` 不再和本机 Obsidian 是同一个文件。可以只通过机器人管理待办，或者用 git、Syncthing 同步，需要处理两边同时修改的冲突。用 Microsoft To Do 后端（阶段 8.2）时不用同步，换到服务器上照样能读。

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { parse as parseToml } from 'smol-toml';
+import { parse as parseToml, TomlError } from 'smol-toml';
 import { isNotFound } from '../fs.js';
 import { logger as defaultLogger, type Logger } from '../logger.js';
 import { mergeConfig } from './merge.js';
@@ -88,8 +88,18 @@ async function readToml(path: string, hint: string): Promise<Record<string, unkn
   try {
     return parseToml(text) as Record<string, unknown>;
   } catch (error) {
-    throw new ConfigError(`配置文件 ${path} 不是有效的 TOML：${(error as Error).message}`);
+    throw new ConfigError(`配置文件 ${path} 不是有效的 TOML：${describeTomlError(error)}`);
   }
+}
+
+/**
+ * Where and why, without the parser's quote of the offending line: logs are
+ * not redacted yet at this point, and that line may hold a token or a link.
+ */
+function describeTomlError(error: unknown): string {
+  if (!(error instanceof TomlError)) return '格式错误';
+  const reason = error.message.split('\n')[0]!.replace(/^Invalid TOML document: /, '');
+  return `第 ${error.line} 行第 ${error.column} 列，${reason}`;
 }
 
 function applyEnvOverrides(raw: Record<string, unknown>, env: NodeJS.ProcessEnv) {

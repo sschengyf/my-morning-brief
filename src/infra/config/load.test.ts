@@ -166,6 +166,18 @@ describe('loadConfig', () => {
     await expect(loadConfig({ path, env: {} })).rejects.toThrow('不是有效的 TOML');
   });
 
+  it('says where the TOML is invalid without quoting the line, which may hold a secret', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'config.toml');
+    await writeFile(path, '[monitor]\nhealthcheck_url = ""\n\nsecret-0123456789abcdef\n');
+    const message = await loadConfig({ path, env: {} }).then(
+      () => '',
+      (error: unknown) => (error as Error).message,
+    );
+    expect(message).toMatch(/第 4 行第 \d+ 列，/);
+    expect(message).not.toContain('secret-0123456789abcdef');
+  });
+
   describe('with a shared config', () => {
     const SHARED = [
       '[ollama]',

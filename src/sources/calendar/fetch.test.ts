@@ -22,7 +22,7 @@ describe('fetchCalendar', () => {
   const standup = vcal(['DTSTART:20261102T200000Z', 'DTEND:20261102T203000Z', 'SUMMARY:Standup']);
 
   it('says when no calendar is configured', async () => {
-    expect((await fetchCalendar([], AUCKLAND, now)).text).toBe('（未配置日历）');
+    expect((await fetchCalendar([], AUCKLAND, now)).text).toBe('今天没有日程');
   });
 
   it('turns webcal:// into https://', async () => {

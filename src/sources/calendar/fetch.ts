@@ -13,7 +13,8 @@ export async function fetchCalendar(
   const day = now.setZone(timezone);
   const date = day.toISODate()!;
   if (urls.length === 0) {
-    return { text: '（未配置日历）', raw: { date, events: [], failures: [] }, ok: true };
+    // Not "no calendar configured": the model repeated that wording in the brief.
+    return { text: '今天没有日程', raw: { date, events: [], failures: [] }, ok: true };
   }
 
   const results = await Promise.allSettled(

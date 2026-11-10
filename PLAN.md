@@ -7,7 +7,7 @@
 一个常驻在 macOS 上的个人助手：
 
 - 每天定时（默认 08:00）抓取**天气、今日日程、待办、新闻**，交给**本地 Ollama 模型**整理成一份简短的中文早报，通过 **Telegram 或 Discord 机器人**推送（手机和电脑同步；两个渠道可以只开一个，也可以同时开）。
-- 推送后可以在聊天软件里**直接对话**：追问早报内容、问天气日程，以及管理待办。
+- 推送后可以在聊天软件里**直接对话**：追问早报内容、问天气日程，以及管理待办（`todo.md`），或者查看 Microsoft To Do 里的待办（阶段 8.2，只读）。
 - 模型推理完全在本机，不调用任何云端大模型 API。
 - 用户出门旅行时（Mac 留在奥克兰家里），可以在聊天软件里**手动输入城市名**，切换早报的时区和天气位置。
 
@@ -76,7 +76,7 @@ my-morning-brief/
 │   │   │                       #   conversation.ts（当天早报和对话记忆）、day-data.ts（数据缓存）、menu.ts、parse.ts、display.ts、links.ts
 │   │   ├── telegram/           #   adapter.ts（grammY）、send.ts、format.ts（Markdown → Telegram HTML）
 │   │   └── discord/            #   adapter.ts（discord.js，只处理私信）、slash-commands.ts、format.ts
-│   └── scheduler/              # 按时运行：scheduler.ts（轮询、重试、降级、重发）、state.ts（state.json）、prompt.ts（首次设置提醒）、keep-awake.ts（caffeinate）
+│   └── scheduler/              # 按时运行：scheduler.ts（轮询、重试、降级、重发）、state.ts（state.json）、prompt.ts（首次设置提醒）、keep-awake.ts（caffeinate）、healthcheck.ts（阶段 8.3）
 ├── test/                       # 测试共用的 helpers.ts 和 fixtures/（示例 .ics、RSS、天气和城市查询 JSON）；测试本身在 src/ 里
 ├── config.example.toml         # 单个配置文件的模板（本机跑 brief:dry 用）
 ├── config.shared.example.toml  # 阶段 9：共用配置模板；真正的 config.shared.toml 不提交 git
@@ -102,15 +102,15 @@ my-morning-brief/
 - 文件和目录名用小写短横线（kebab-case），例如 `select-news.ts`、`chat-core.ts`。
 - 单元测试放在被测文件旁边，一个源文件对应一个测试文件，例如 `src/llm/sanitize.ts` 和 `src/llm/sanitize.test.ts`。测试可以直接引用别的模块内部的文件，方便单独测一个函数（模块边界规则对 `*.test.ts` 放宽这一条，依赖方向照样检查）。
 
-程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`archive/`、`schedules.json`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里，每个人是 `users/<名字>/data/`（阶段 9），根目录的 `data/` 只在本机跑 `brief:dry` 时用。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
+程序产生的所有数据（`state.json`、`location.json`、`todo.md`、`ms-token.json`、`archive/`、`schedules.json`、`app.lock`）都在 `paths.data_dir` 下，默认是项目里的 `data/` 目录（整个目录不提交 git）。迁移或备份时复制这一个目录就行；Docker 部署时把数据卷挂到这里，每个人是 `users/<名字>/data/`（阶段 9），根目录的 `data/` 只在本机跑 `brief:dry` 时用。`config.toml` 不放在 `data/` 里：它是用户手写的配置，不是程序产生的数据。
 
-`package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但不算任何一个定时，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
+`package.json` 脚本：`start`（常驻运行）、`brief:once`（立即发一份早报后退出；会写归档，但不算任何一个定时，所以不影响当天的定时早报）、`brief:dry`（只在终端打印原始数据和早报，不发消息、不写归档）、`dev:dry`（同上，用 tester 的配置和数据，阶段 9.6）、`test`（`TZ=UTC` 和 `TZ=Pacific/Auckland` 各跑一遍）、`lint`、`typecheck`。
 
 ## 4. 配置文件 `config.example.toml`
 
 ```toml
 [paths]
-data_dir = "data"   # 程序产生的所有数据（state.json、location.json、todo.md、archive/、schedules.json、app.lock）都在这里；相对路径按项目根目录解析。Docker 把数据卷挂到这个目录
+data_dir = "data"   # 程序产生的所有数据（state.json、location.json、todo.md、ms-token.json、archive/、schedules.json、app.lock）都在这里；相对路径按项目根目录解析。Docker 把数据卷挂到这个目录
 
 # 聊天渠道：至少开一个。两个都开时，早报两边都发；在哪边提问就在哪边回复
 [telegram]
@@ -164,14 +164,19 @@ brief_count = 10              # 阶段 8.1 新增：早报里写几条新闻，�
 
 [todo]
 backend = "markdown"   # 阶段 8.2 新增："markdown"（下面的 todo.md）或 "ms_todo"（Microsoft To Do，只读，见 8.2）
-file = "todo.md"   # 相对路径按 data_dir 解析，支持 ~ 和绝对路径
+file = "todo.md"   # markdown 用。相对路径按 data_dir 解析，支持 ~ 和绝对路径
+lists = []         # ms_todo 用：读哪些列表；不写就读默认列表
+urgent_days = 3    # ms_todo 用：几天内截止算紧急，早报只写紧急的（阶段 8.5；以前叫 brief_days，旧名字仍然认）
+
+[microsoft]
+client_id = ""     # ms_todo 用：Azure 应用注册的“应用程序（客户端）ID”，不是机密；多人部署时写在共用配置里
 
 [archive]
 dir = "archive"        # 相对路径按 data_dir 解析
 retention_days = 90    # 超过天数的归档在每天发送早报后删除；0 表示永久保留
 
 [monitor]
-healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthchecks.io 的 ping 地址
+healthcheck_url = ""   # 可选，例如 healthchecks.io 的 ping 地址，定时早报发出后请求一次（阶段 8.3）
 ```
 
 `config.toml`、`state.json`、`location.json`、`todo.md`、`archive/`（都在 `data/` 下）必须写进 `.gitignore`，因为它们包含 token、日历私密链接、所在城市、个人日程和待办。
@@ -343,9 +348,9 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 |---|---|
 | `/start` `/help` | 中文帮助 |
 | `/brief` | 立即生成并发送早报（`runBrief`，`kind = manual`）；不算任何一个定时，所以不影响当天的定时早报 |
-| `/todo` | 列出未完成待办 |
-| `/add 内容` | 添加待办；内容为空时提示用法 |
-| `/done 序号` | 完成待办，回复“已完成：<内容>”；序号无效时提示“先用 /todo 看看列表” |
+| `/todo` | 列出未完成待办（阶段 8.5 起 ms_todo 按象限分组） |
+| `/add 内容` | 添加待办；内容为空时提示用法；ms_todo 时只回复“请在 App 里修改” |
+| `/done 序号` | 完成待办，回复“已完成：<内容>”；序号无效时提示“先用 /todo 看看列表”；ms_todo 时只回复“请在 App 里修改” |
 | `/todo_login` | 阶段 8.2 新增：登录 Microsoft To Do（`backend = "ms_todo"` 时） |
 | `/refresh` | 强制重新抓取今天的天气、日程和待办（不重新挑选新闻，见下面“普通文字消息”） |
 | `/history` | 列出最近 14 天有归档的日期 |
@@ -516,7 +521,9 @@ healthcheck_url = ""   # 第二批（阶段 8）生效。可选，例如 healthc
 
 ### 第二批：增强功能（阶段 8）
 
-阶段 8 的四项功能彼此独立，可以按任意顺序做，每做完一项都要更新 README 并跑完整测试。
+阶段 8 的各项功能彼此独立，可以按任意顺序做，每做完一项都要更新 README 并跑完整测试。
+
+**进度（2026-11-10）**：8.1–8.4 已完成。8.2 的实际运行验收里，“撤销授权后提示重新登录”只有单元测试，没有实测；8.3 已给 ivan 和 tester 配好检查。8.5 待做。
 
 #### 8.1 新闻由模型筛选
 
@@ -584,7 +591,7 @@ README：
 
 2026-11-06 决定：待办只存一个地方（single source of truth）。选了 Microsoft To Do 的人，增删改都在 To Do App 里做，机器人**只读**：早报和聊天读它，`/todo` 列出它。不做双向同步（冲突、重复、删除都很难处理）。原来计划的 `todo.md` 截止日期（`📅` 写法）挪到第 7 节。
 
-- **后端接口**：个人配置 `[todo] backend = "markdown" | "ms_todo"`，默认 `markdown`（现在的 `todo.md`，行为不变；不用微软账号的人继续用它）。`sources/todos/` 定义 `TodoBackend`：都提供 `list`，可写的后端另外提供 `add`、`complete`。待办统一成 `Todo = { title, due: 'YYYY-MM-DD' | null, important: boolean, list: string | null }`；markdown 后端的 `due` 为 `null`、`important` 为 `false`。
+- **后端接口**：个人配置 `[todo] backend = "markdown" | "ms_todo"`，默认 `markdown`（现在的 `todo.md`，行为不变；不用微软账号的人继续用它）。`sources/todos/source.ts` 的 `readTodos` / `fetchTodos` 按 `backend` 分发；写操作（`addTodo`、`completeTodo`）只有 markdown 有，命令里按 `backend` 判断是否只读。没有另外抽 `TodoBackend` 接口：两种后端时分发最简单，加第三种时再抽。待办统一成 `Todo = { title, due: 'YYYY-MM-DD' | null, important: boolean, list: string | null }`；markdown 后端的 `due` 为 `null`、`important` 为 `false`。
 - **配置**：
   ```toml
   # config.shared.toml：大家共用一个应用注册；想用自己注册的应用的人，在个人配置里写 [microsoft] 覆盖
@@ -599,18 +606,18 @@ README：
   `backend = "ms_todo"` 但 `client_id` 为空时，配置校验报错。client ID 只是应用的身份，登录和令牌每人各自一份，所以默认共用；别人想在授权页上看到自己的应用，就在个人配置里覆盖（2026-11-10 讨论）。`[todo] file` 只对 markdown 有效。
 - **应用注册**（README 写步骤，用户自己操作，免费）：在 Azure 门户注册应用，账户类型选“仅个人 Microsoft 账户”，打开“允许公共客户端流”，委托权限 `Tasks.Read` 和 `offline_access`。只申请读权限，机器人改不了你的待办。
 - **登录 `/todo_login`**（设备码流程）：
-  1. 向 `https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode` 申请设备码，回复“打开 <网址>，输入 <验证码>，15 分钟内有效”。验证码一次性、短时有效，只能用来完成这次登录，所以可以发在私信里；`device_code` 不发、不写日志。
+  1. 向 `https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode` 申请设备码，回复“打开 <网址>，输入 <验证码>，14 分钟内有效”（设备码 15 分钟过期，Discord 的命令回复也是 15 分钟后失效，留 1 分钟余量）。验证码一次性、短时有效，只能用来完成这次登录，所以可以发在私信里；`device_code` 不发、不写日志。
   2. 后台按返回的 `interval` 轮询 token 接口，直到成功、被拒绝或过期。同一时间只有一个登录；重复发 `/todo_login` 时回复“上一个登录还在等待”。成功后回复“已连接 Microsoft To Do，读到 N 条未完成待办”；失败回复中文原因。
-  3. refresh token 存在 `data_dir/ms-token.json`（`writeFileAtomic`，权限 600），因为每次刷新都会换新的，不能放 `.env`。读到后注册到 logger 脱敏。access token 只在内存里，过期前刷新。
+  3. refresh token 和 access token（带过期时间）一起存在 `data_dir/ms-token.json`（`writeFileAtomic`，权限 600），因为每次刷新都会换新的，不能放 `.env`。读到后注册到 logger 脱敏。过期前 1 分钟刷新；同一个文件的刷新和登录保存排队进行，Graph 返回 401 时只有文件里还是被拒的那个令牌才刷新（同时被拒的几个请求只刷新一次）。dry run 刷新的令牌只留在内存里，不写回。
   4. backend 不是 `ms_todo` 时，`/todo_login` 回复怎么改配置。
-- **读取**：`GET /me/todo/lists` 按名字找列表，再 `GET /me/todo/lists/{id}/tasks?$filter=status ne 'completed'`，跟着 `@odata.nextLink` 翻页，每个列表最多 100 条，请求有超时。
+- **读取**：`GET /me/todo/lists` 按名字找列表，再 `GET /me/todo/lists/{id}/tasks?$filter=status ne 'completed'`，跟着 `@odata.nextLink` 翻页（每页 100 条），每个列表最多 1000 条（早报读完再按日期过滤，上限要远大于实际列表），请求有超时。同一个列表在配置里写了两次（大小写或空格不同）只读一次。
   - 列表名找不到时不在启动时报错（那时可能还没登录、网络也可能不通），而是待办部分写“（待办获取失败：找不到列表 X，现有列表：A、B）”。
-  - 截止日期：To Do 只有日期没有时间，`dueDateTime` 只取日期部分。返回的时区字段怎么换算，实现时用真实数据确认后再定，并写进 README 设计说明。
+  - 截止日期：To Do 只有日期没有时间，但返回一个时间。实测（2026-11-10）奥克兰的 11月19日返回 `2026-11-18T11:00:00`、时区 UTC，即用户当地 0 点换算成 UTC。规则：正好是 0 点的取写着的日期；其他时间按返回的时区读、换算到**家里的时区**取日期（To Do 里的日期是在家里的时区设的），UTC 东西两边都对；Windows 时区名直接取写着的日期。
   - 重要：`importance == "high"`（App 里的星标）。
   - 备注、提醒时间、子步骤不读；重复任务照常显示当前这一次。
 - **格式**（纯函数，测试在两个 TZ 下跑）：按当前生效时区算天数，写成“交水费（截止 11月5日，还有 3 天）”“（今天截止）”“（已过期 2 天）”，标了重要的加“⭐”。排序：已过期和有截止日期的按日期在前，然后是重要的，然后其余；同组内保持 To Do 里的顺序。读多个列表时加列表名。早报、聊天上下文和 `/todo` 用同一个格式；ms_todo 的 `/todo` 不显示序号（不能用序号完成）。
-- **早报只写近期的待办**（2026-11-10 用户提出：每天看到很久以后的事会麻木）：Microsoft To Do 后端时，交给早报的只有已过期、今天截止和 `[todo] brief_days`（默认 3）天内截止的待办；截止日期更远的和没有截止日期的（包括标了星的）都不写进早报，也不提数量。`/todo` 和聊天的上下文仍然是全部。过滤是纯函数 `briefTodos(todos, today, days)`；`Sources.todos` 多一个参数区分早报和聊天。`todo.md` 没有截止日期，不过滤（以后支持 `📅` 时再加）。
-- **早报提示词**第 4 条改为“已过期、今天截止和标了重要的优先”（stage 3 引用的提示词同步改；markdown 后端没有这些信息时这句话也不冲突）。
+- **早报只写近期的待办**（2026-11-10 用户提出：每天看到很久以后的事会麻木）：Microsoft To Do 后端时，交给早报的只有已过期、今天截止和 `[todo] brief_days`（默认 3，8.5 改名为 `urgent_days`）天内截止的待办；截止日期更远的和没有截止日期的（包括标了星的）都不写进早报，也不提数量。`/todo` 和聊天的上下文仍然是全部。过滤是纯函数 `briefTodos(todos, today, days)`；`Sources.todos` 多一个参数区分早报和聊天。`todo.md` 没有截止日期，不过滤（以后支持 `📅` 时再加）。
+- **早报提示词**第 4 条改为“已过期、今天截止和标了 ⭐ 的优先”（stage 3 引用的提示词同步改；markdown 后端没有这些信息时这句话也不冲突）。
 - **只读的命令**：ms_todo 时 `/add`、`/done` 仍然注册，回复“待办在 Microsoft To Do 里管理，请在 App 里修改；用 /todo 看当前列表”。`/help` 按后端写不同的说明。
 - **缓存**：早报和聊天上下文沿用 30 分钟的数据缓存；`/todo` 每次直接读 To Do，在 App 里改完马上能看到；`/refresh` 照常清缓存。
 - **失败**：没登录、refresh token 失效（长期不用会过期，或者用户在账户设置里撤销了授权）、网络失败、429 限流，都只影响待办部分：“（待办获取失败：……）”，授权问题加上“用 /todo_login 重新登录”，早报照常发出。不重试，早报不等。
@@ -684,6 +691,25 @@ README：
   - 降级早报用 `- 来源 | 原文标题 [原文](链接)` 格式。
 - 人工检查：用真实的 44 个源跑 `brief:dry` 至少 3 次，确认每条都是“来源 | 标题 | 副标题”格式（只有标题的是两段）、来源和配置里的名字一致且没有重复、标题是中文、链接在行末。
 
+#### 8.5 待办按艾森豪威尔矩阵分组
+
+2026-11-10 决定。只对 Microsoft To Do 后端；`todo.md` 没有星标和截止日期，全落在第 4 象限，分组没有意义，保持现在的列表。
+
+- **不用模型判断**，用 To Do 里已有的信息算（纯函数 `quadrant(todo, today, urgentDays)`，和截止天数放在 `format.ts`）：
+  - **重要** = 星标（`important`），由用户自己在 To Do 里标。
+  - **紧急** = 已过期、今天截止或 `urgent_days` 天内截止。没有截止日期算不紧急。
+  - 第 1 象限：重要且紧急；第 2 象限：重要不紧急；第 3 象限：紧急不重要；第 4 象限：其他。
+- **配置**：`[todo] brief_days` 改名为 `urgent_days`（默认 3），“早报里写的”和“紧急的”是同一回事；旧名字 `brief_days` 仍然认（两个都写时以 `urgent_days` 为准），README 和模板只写新名字。
+- **早报**：只写第 1、3 象限（就是现在 `briefTodos` 留下的），给模型的文本分成“重要且紧急”和“紧急不重要”两组，第 1 象限在前；都没有时写“近 N 天没有要截止的待办”。第 2、4 象限不进早报。提示词第 4 条改为“先写重要且紧急的，再写紧急但不重要的”（stage 3 的引用同步改）。
+- **`/todo`**：按象限分组列出全部，组名“🔥 重要且紧急”“📅 重要不紧急”“⚡ 紧急不重要”“💤 其他”；空的组不显示；组内沿用现在的排序（截止日期在前）。不另加 `/matrix` 命令。
+- **聊天上下文**：和 `/todo` 用同一份分组文本，模型被问到“哪些重要”时能直接看到。
+- **第 2 象限**：这一版只在 `/todo` 里看。以后做“每周回顾”（第 7 节）时，在每周的某份早报里提第 2 象限。
+- 模型这一版只照着分好的组写；以后想让它给建议（“这条可以交给别人”），也只在聊天里说，改动仍由用户在 To Do 里做。
+
+**验收**：
+- 单元测试（两个 TZ）：四个象限的边界（`urgent_days` 当天算紧急、已过期、没有日期、星标但日期很远）；早报只有第 1、3 象限且第 1 象限在前；`/todo` 分组和空组不显示；`todo.md` 不分组；`brief_days` 旧名字仍然生效、两个都写时用 `urgent_days`。
+- 实际运行：在 To Do 里各放一条四个象限的待办，`/todo` 分组正确，`dev:dry` 和 `/brief` 的待办部分只有第 1、3 象限。
+
 ### 第三批：多用户（阶段 9）
 
 2026-11-05 决定加第二个用户，这一阶段优先于阶段 8 剩下的 8.2、8.3。仍然是“一人一个容器、共用一个 Ollama”（见第 7 节“多用户部署”），这一阶段解决人多以后配置怎么管：共用的设置只写一份，密钥和个人设置分开，加一个人不用复制一大段。
@@ -749,7 +775,7 @@ users/                    # 整个 gitignore
 - **tester 是一个普通用户**：用 `add-user.sh tester` 建，有自己的个人配置、`.env`、数据目录、compose 服务和**单独的测试 bot**（不是谁正在用的 bot）。新的聊天功能先在 tester 的容器里试，没问题再重建其他人的容器。它也用来做阶段 9 剩下的验收（两个容器互不干扰、排队时间和内存占用）。
 - **新环境变量 `MORNING_BRIEF_DATA_DIR`**：覆盖 `paths.data_dir`，相对路径按项目根目录解析（和配置里的写法一样）。同一份 `users/tester/config.toml` 在容器里用默认的 `/app/data`，在本机指到 `users/tester/data`，配置文件里不写 `data_dir`。
 - **`pnpm dev:dry`**：设好 `MORNING_BRIEF_SHARED_CONFIG=config.shared.toml`、`MORNING_BRIEF_CONFIG=users/tester/config.toml`、`MORNING_BRIEF_DATA_DIR=users/tester/data` 后跑 dry run，读的是本机最新的代码，不用重新构建镜像。`brief:dry` 照旧读根目录的 `config.toml`（单文件模式还在，`config.example.toml` 保留）。
-- 本机的 dry run 和 tester 的容器同时用 `users/tester/data/` 没有问题：dry run 不拿 `app.lock`、不写归档。8.2 的 To Do 登录凭证会刷新换新，到时 dry run 只读不写回（实现 8.2 时确认）。
+- 本机的 dry run 和 tester 的容器同时用 `users/tester/data/` 没有问题：dry run 不拿 `app.lock`、不写归档。8.2 的 To Do 登录凭证会刷新换新，dry run 刷新的令牌只留在内存里、不写回文件（已实现，2026-11-10 实测文件没被改动）。
 - `dev:dry` 能正常跑以后，用户删掉根目录的 `config.toml`。
 - README 第 2 节、AGENTS.md 的本地开发说明改成 `dev:dry` 和 tester 的容器。
 
@@ -782,7 +808,7 @@ users/                    # 整个 gitignore
 - “家”的时区和位置写在 `config.toml` 的 `[brief]` 里；旅行时用户通过 `/city` 手动切换，临时设置写在 `data_dir/location.json`，不改用户手写的 `config.toml`。**不自动检测位置**。
 - `getEffectiveLocation()` 返回 `{ timezone, city, region, country, latitude, longitude, isHome }`：有 `location.json` 时用它，否则用 config。`location.json` 损坏时记 warn 并退回 config，不能让程序启动失败。
 - **不使用 Mac 的系统时区**：Mac 留在奥克兰时系统时区不会跟着人走，部署到服务器后系统时区通常是 UTC，所以只认 `getEffectiveLocation()`。
-- 所有和“今天”有关的计算（定时、日历、归档目录名、数据缓存，以及阶段 8 的待办截止日期）都用当前生效时区。
+- 所有和“今天”有关的计算（定时、日历、归档目录名、数据缓存，以及待办还剩几天）都用当前生效时区。例外：Microsoft To Do 的截止日期本身按**家里的时区**还原（日期是在家里的时区设的，见 8.2），算剩余天数时再和当前生效时区的“今天”比。这是有意的，不要改成统一用一个时区。
 - 所有定时的时间和补发窗口始终按当前生效时区的当地时间计算。
 - `searchCity` 调用 `https://geocoding-api.open-meteo.com/v1/search?name=…&count=5&language=en`，返回结果里的 `name`、`admin1`（省/州）、`country`、`latitude`、`longitude`、`timezone`，超时 20 秒。
 - `location.json` 也通过 `writeFileAtomic` 写入。
@@ -805,8 +831,8 @@ users/                    # 整个 gitignore
 
 在阶段 1 实现：
 
-- 所有持久数据都是 `data_dir` 下的普通文件（`state.json`、`location.json`、`todo.md`、`archive/`），不用数据库。迁移时复制整个 `data_dir` 即可。
-- **原子写入**：`infra/fs.ts` 提供 `writeFileAtomic(path, content)`：先写同目录下的临时文件 `.<文件名>.<随机串>.tmp`，`fsync` 后 `rename` 覆盖目标文件。`state.json`、`location.json`、`todo.md` 和归档文件都必须通过它写入，这样进程在写到一半时被杀（服务器重启、容器更新、断电）也不会留下损坏的文件。临时文件放在同目录是为了保证 `rename` 不跨文件系统。
+- 所有持久数据都是 `data_dir` 下的普通文件（`state.json`、`location.json`、`todo.md`、`ms-token.json`、`archive/`），不用数据库。迁移时复制整个 `data_dir` 即可。
+- **原子写入**：`infra/fs.ts` 提供 `writeFileAtomic(path, content)`：先写同目录下的临时文件 `.<文件名>.<随机串>.tmp`，`fsync` 后 `rename` 覆盖目标文件。`state.json`、`location.json`、`todo.md`、`ms-token.json`（权限 600，`writeFileAtomic` 的 `mode` 参数）和归档文件都必须通过它写入，这样进程在写到一半时被杀（服务器重启、容器更新、断电）也不会留下损坏的文件。临时文件放在同目录是为了保证 `rename` 不跨文件系统。
 - 启动时清理 `data_dir` 里残留的 `.*.tmp` 文件。
 - `state.json` 读取时如果 JSON 损坏，记一条 warn，改名为 `state.json.corrupt-<时间>` 保留现场，然后按空状态继续运行（最坏情况是当天多发一份早报），不能让进程启动失败。
 - `data_dir` 不存在时自动创建；没有写权限时启动失败并给出中文提示。
@@ -814,20 +840,22 @@ users/                    # 整个 gitignore
 ## 7. 以后可以做的（这三批都不做）
 
 - **待办助手和艾森豪威尔矩阵**（2026-11-05 讨论）。目标是用自然语言管理待办（“提醒我明天交水费”），并按艾森豪威尔矩阵（重要 × 紧急，四个象限）给待办分类。按顺序分步做，每步都可以单独用：
-  - **2026-11-06 更新**：用 Microsoft To Do 的人（阶段 8.2），待办只在 To Do 里改，机器人只读。所以下面第 2 步只适用于 markdown 后端；第 3 步的“重要”直接用 To Do 的星标（用户自己标），不需要模型判断，“紧急”照样由截止日期算。
+  - **2026-11-06 更新**：用 Microsoft To Do 的人（阶段 8.2），待办只在 To Do 里改，机器人只读。所以下面第 2 步只适用于 markdown 后端。
+  - **2026-11-10 更新**：To Do 用户的矩阵挪到阶段 8.5（星标 = 重要，`urgent_days` 内截止 = 紧急，不用模型）。早报只写第 1、3 象限，第 2 象限不进每天的早报（用户不想每天看到很久以后的事），以后在“每周回顾”里提。下面第 3 步只剩 markdown 后端的部分。
   1. **截止日期**：Microsoft To Do 自带（阶段 8.2）。markdown 后端要先做下面的“`todo.md` 的截止日期”。紧急程度由截止日期决定，没有日期就无从谈起。
   2. **工具调用（tool calling）**（只适用于 markdown 后端）：聊天时把 `addTodo`、`completeTodo`、`listTodos` 作为工具交给模型（Qwen 系列支持工具调用），“明天”“下周五”按当前生效时区换算成 `📅` 日期。**做之前必须先处理提示注入**：日历邀请和 RSS 里的文字可能诱导模型调用工具。至少要做到：只有用户本人消息触发的对话才能调用工具（生成早报时不提供工具），并且有写操作的工具调用要先发给用户确认（Telegram / Discord 按钮）再执行。
-  3. **艾森豪威尔矩阵**：
+  3. **艾森豪威尔矩阵（markdown 后端）**：
      - 紧急程度用代码算（纯函数、可测试）：已过期或若干天内到期算紧急，天数可配置；没有截止日期算不紧急。
      - 重要程度需要判断，由本地模型给建议、用户确认，不自动决定。模型参考用户写的长期目标或重点（类似新闻的 `interests`），返回结构化结果（Ollama 结构化输出，JSON schema：象限 + 一句理由）。
      - 分类做成接口，例如 `decide(input, choices) → { choice, confidence, reason }`，先只实现 Ollama 版本。本地模型自己报的置信度不可靠，所以第一版每条都由用户确认。
      - 象限存进 `todo.md`，用 Obsidian 能识别的写法（例如 Tasks 插件的优先级标记或标签），在 Obsidian 里也能看、能改。
-     - 早报的待办部分按象限写：列出第 1 象限（重要且紧急），再提一条本周该推进的第 2 象限（重要不紧急）。
+     - 早报和 `/todo` 的写法和 8.5 一样：早报只写第 1、3 象限，第 2 象限留给每周回顾。
   4. **拆成待办 sub-agent**：第 2、3 步先放在聊天的同一个模型里做。等待办逻辑多到主对话的提示词装不下（分类、拆分任务、每周回顾、提醒第 2 象限别拖着等），再拆成单独的 sub-agent：主对话判断和待办有关时转给它，它有自己的提示词、工具和上下文（完整待办列表和目标）。工具本身不用改，只是换个调用的地方。代价是多一次模型调用（本地 32b 约多 10–30 秒）和路由可能判断错。
   - **只用本地模型**：考察过 TypeSafe 的 Jev（专门做分类和打分、带置信度的决策模型，很适合象限分类），但它只有云端 API、没有公开权重，待办会离开本机，所以不用。第三方的 Jev 兼容本地服务（Ollaya、Ollajev）跑的是别的开源模型，项目还很新，Ollajev 的部分模型会执行模型仓库里的代码，也不用。以后出现成熟的本地决策模型，再给分类接口加一个实现。
 - **`todo.md` 的截止日期**（原阶段 8.2，2026-11-06 因改用 Microsoft To Do 挪到这里）：兼容 Obsidian Tasks 插件的 `📅 2026-11-05` 写法，解析成 8.2 的 `Todo.due`，格式和排序直接复用 8.2；`/done` 在行尾追加 `✅ 日期`；带 `🔁` 的重复任务不修改、提示去 Obsidian 里完成；其他 Tasks 标记原样保留。等有人用 markdown 后端又需要截止日期时再做。
 - 语音消息：用本地 Whisper 转文字。
-- 晚间回顾：每天晚上总结完成了哪些待办，提醒明天的日程。
+- 晚间回顾：每天晚上总结完成了哪些待办，提醒明天的日程。To Do 只读，“完成了哪些”要读 To Do 里今天完成的任务（`status eq 'completed'` 加完成时间）。
+- **每周回顾**（2026-11-10 提出）：每周某一份早报（例如周日）加一段第 2 象限（重要不紧急）的待办，提醒安排时间，避免一直拖着；第 2 象限不进每天的早报（见 8.5）。
 - **在 Discord 服务器频道里使用**（2026-11-05 提出）：现在只能私信（只申请了 `DirectMessages`、`dispatch` 忽略非私聊、slash 命令限定 `BotDM`），因为早报含日程、待办和位置。想在自己服务器的私密频道里用时：
   - 配置加 `discord.channel_id`；只处理这个频道的消息，其他频道忽略；发送者仍然必须是 `user_id`。
   - 加 `Guilds`、`GuildMessages` 权限；直接打字聊天还要 Message Content 特权权限（Developer Portal 手动打开，少于 100 个服务器不用审核）。不想开就只支持 slash 命令和 @机器人（@ 它的消息不需要这个权限）。

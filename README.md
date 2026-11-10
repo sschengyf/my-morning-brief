@@ -10,10 +10,10 @@
 2. **Ollama**：从 <https://ollama.com/download> 安装，确认它在“系统设置 → 通用 → 登录项”里（安装时默认会加上）。然后下载模型：
 
    ```sh
-   ollama pull qwen3:32b
+   ollama pull qwen3.6:35b
    ```
 
-   模型名以 <https://ollama.com/library> 为准。qwen3:32b 需要约 20 GB 内存；内存小的 Mac 可以换 `qwen3:14b` 或 `qwen3:8b`，早报质量会差一些。
+   模型名以 <https://ollama.com/library> 为准。qwen3.6:35b 需要约 24 GB 内存（2026-11-10 起用它，比 qwen3:32b 快约 5 倍、更守人名规则）；内存小的 Mac 可以换更小的 Qwen，早报质量会差一些。
 
 3. **Node 24 和 pnpm**（可选）：只用来在本机跑 `pnpm brief:dry` 试早报和跑测试。只用 Docker 可以不装，第 4 步有对应的 Docker 命令。
 
@@ -38,7 +38,7 @@ scripts/add-user.sh ivan        # 名字用小写字母、数字和 -
 
 至少要改：
 
-- `config.shared.toml` 的 `ollama.model`：和 `ollama list` 显示的名字一致，例如 `qwen3:32b`；
+- `config.shared.toml` 的 `ollama.model`：和 `ollama list` 显示的名字一致，例如 `qwen3.6:35b`；
 - `users/ivan/config.toml` 的 `[brief]`：`timezone`、`city`、`latitude`、`longitude`，你“家”的位置；
 - `users/ivan/.env`：聊天渠道的 token 和 id，见第 3 步。
 
@@ -88,7 +88,7 @@ docker compose build template                                     # 第一次和
 docker compose run --rm ivan node --import tsx src/index.ts --dry
 ```
 
-第一次生成要先把模型读进内存，可能要一两分钟；之后一份约 20–40 秒。看看天气、日程、待办对不对，新闻后面的“原文”链接能不能打开。
+第一次生成要先把模型读进内存，多花几秒到一分钟；之后一份约 10–20 秒（qwen3.6:35b）。看看天气、日程、待办对不对，新闻后面的“原文”链接能不能打开。
 
 ## 5. 启动
 
@@ -274,7 +274,7 @@ scripts/add-user.sh alice
 1. 给 alice 建一个**她自己的** Discord 机器人（第 3 步），token 填进 `users/alice/.env`。每个人要有自己的机器人：同一个 token 被两个容器登录时，每个容器都会收到所有人的私信。
 2. 改 `users/alice/config.toml`：家的城市和时区、日历、兴趣（`interests`、`avoid`），想多订几个源就写 `extra_feeds`。
 3. `docker compose up -d alice`，让 alice 私信机器人拿到用户 ID，填进 `.env` 后再 `docker compose up -d alice`。
-4. 让 alice 在聊天里设置定时，和别人错开几分钟：模型一次只处理一个请求，大家都在 08:00 时后面的人要排队（一份早报约一分钟；实测两人同时发时，后面的人多等约 45 秒）。不要靠调高 Ollama 的 `OLLAMA_NUM_PARALLEL` 来解决：64GB 的 Mac 跑 32B 模型时内存只剩 1 GB 左右，并发会再多占内存。
+4. 让 alice 在聊天里设置定时，和别人错开几分钟：模型一次只处理一个请求，大家都在 08:00 时后面的人要排队（qwen3.6:35b 一份早报约 10 秒；换模型前用 qwen3:32b 实测，两人同时发时后面的人多等约 45 秒）。不要靠调高 Ollama 的 `OLLAMA_NUM_PARALLEL` 来解决：64GB 的 Mac 加载模型后空闲内存不到 1 GB，并发会再多占内存。
 
 其他：
 
@@ -364,7 +364,7 @@ node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）�
 - 模型给的编号里，不存在和重复的忽略、多的截断；能用的不到 `brief_count` 一半算失败，够一半但不满时用按源轮流顺序里没选上的补满。
 - **新闻的来源由程序加，不让模型写。** 模型只写“中文标题 | 中文副标题 [N3]”，清理输出时按编号查到来源，补在行首（`sanitizeBrief`）。原因是模型会翻译来源名（“New Zealand Herald”写成“新西兰先驱报”）；来源本身也来自 feed，同样要清理：去掉链接和 Markdown 符号，`|` 换成空格；域名不删，把点换成全角（“Latest stories from interest．co．nz”），能看懂但不会变成链接，也不会像模型输出里那样被删成“来自 的最新消息”。只给列表行（`- `、`1.`、`1、` 开头）加来源，开头总览里引用新闻的句子不加。模型照样写了一模一样的来源时不会重复，写的是翻译过的来源就会出现两次，提示词里明确要求不写。
 - 按源轮流按订阅地址分组，不按名字，所以几个源起同一个名字时仍然各自有机会。
-- **已知问题：人名会被翻译。** 提示词要求人名照抄原文，qwen3:32b 仍会把 Trump 写成“特朗普”、Vance 写成“万斯”，有一次还把 JD Vance 的话写成了“拜登”说的。讨论过用对照表在代码里换回原文，决定先不做（2026-11-05）。点“原文”可以核对。
+- **人名会被翻译（基本解决）。** 提示词要求人名照抄原文，qwen3:32b 仍会把 Trump 写成“特朗普”、Vance 写成“万斯”，有一次还把 JD Vance 的话写成了“拜登”说的。2026-11-10 换成 qwen3.6:35b 后，3 次测试只有 1 处（有通行中文名的“黄仁勋”）。点“原文”可以核对。
 - **已知情况：热门话题会占好几条。** 筛选提示词要求同一件事只选一条，qwen3:32b 只部分做到（2026-11-05 实测，美国中期选举 10 条里占 5–6 条，同一起本地事件偶尔两家媒体各一条）。可以接受：占得多说明那个话题确实热门。
 - 降级早报（模型不可用时）不调用模型挑选，直接用按源轮流的前 `brief_count` 条，全部列出。
 - 链接规范化时去掉 `utm_*`、`at_*`（BBC 加的）、`fbclid`、`gclid`、`mc_cid`、`mc_eid` 和末尾的 `/`。

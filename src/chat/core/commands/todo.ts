@@ -20,8 +20,8 @@ export const todoCommand: Command = async (_args, io, ctx) => {
   } catch (error) {
     return io.reply(`待办获取失败：${describeError(error)}`);
   }
-  if (todos.length === 0) return io.reply('没有未完成的待办 🎉');
-  await io.reply(`未完成的待办：\n${todoText(ctx.deps.config, todos, await today(ctx))}`);
+  const text = todoText(ctx.deps.config, todos, await today(ctx));
+  await io.reply(todos.length === 0 ? text : `未完成的待办：\n${text}`);
 };
 
 export const addCommand: Command = async (args, io, ctx) => {

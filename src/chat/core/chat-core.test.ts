@@ -160,7 +160,7 @@ describe('ChatCore commands', () => {
 
   it('adds, lists and completes todos', async () => {
     const { send, config } = await setup();
-    expect(await send('/todo')).toEqual(['没有未完成的待办 🎉']);
+    expect(await send('/todo')).toEqual(['没有未完成的待办']);
     expect(await send('/add')).toEqual(['用法：/add 待办内容，例如 /add 交水费']);
     expect(await send('/add 交水费')).toEqual(['已添加：交水费（第 1 项）']);
     expect(await send('/add 买牛奶')).toEqual(['已添加：买牛奶（第 2 项）']);

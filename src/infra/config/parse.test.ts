@@ -177,14 +177,11 @@ describe('parseConfig', () => {
     expect(() => parseConfig(raw)).toThrow('todo.backend');
   });
 
-  it('reads urgent_days, still accepting its old name brief_days', () => {
+  it('reads urgent_days, 3 by default', () => {
     const raw = minimalRawConfig();
     expect(parseConfig(raw).todo.urgent_days).toBe(3);
-    raw.todo = { brief_days: 5 };
+    raw.todo = { urgent_days: 5 };
     expect(parseConfig(raw).todo.urgent_days).toBe(5);
-    raw.todo = { brief_days: 5, urgent_days: 2 };
-    expect(parseConfig(raw).todo).toMatchObject({ urgent_days: 2 });
-    expect(parseConfig(raw).todo).not.toHaveProperty('brief_days');
   });
 
   it('validates the timezone', () => {

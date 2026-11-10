@@ -41,6 +41,25 @@ function warnRetired(raw: Record<string, unknown>, logger: Logger): void {
   }
 }
 
+/** Settings that have a new name; the old one is still read, with a warning. */
+const RENAMED: [section: string, from: string, to: string][] = [
+  ['todo', 'brief_days', 'urgent_days'],
+];
+
+/**
+ * Renames old keys within one file, before merging: otherwise a personal old
+ * name would lose to a shared new one. The new name wins within a file.
+ */
+function renameOld(raw: Record<string, unknown>, logger: Logger): Record<string, unknown> {
+  return RENAMED.reduce((result, [section, from, to]) => {
+    const table = result[section];
+    if (!table || typeof table !== 'object' || !(from in table)) return result;
+    logger.warn(`${section}.${from} 已经改名为 ${section}.${to}，请改一下这一行`);
+    const { [from]: old, ...rest } = table as Record<string, unknown>;
+    return { ...result, [section]: { [to]: old, ...rest } };
+  }, raw);
+}
+
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<Config> {
   const env = options.env ?? process.env;
   const logger = options.logger ?? defaultLogger;
@@ -52,7 +71,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Confi
   if (!env.MORNING_BRIEF_SHARED_CONFIG) {
     const raw = await readToml(path, '请先复制 config.example.toml 为 config.toml');
     warnRetired(raw, logger);
-    return parseConfig(applyEnvOverrides(raw, env), options);
+    return parseConfig(applyEnvOverrides(renameOld(raw, logger), env), options);
   }
 
   const sharedPath = resolve(PROJECT_ROOT, env.MORNING_BRIEF_SHARED_CONFIG);
@@ -70,7 +89,8 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Confi
   warnRetired(shared, logger);
   warnRetired(personal, logger);
   try {
-    return parseConfig(applyEnvOverrides(mergeConfig(shared, personal), env), options);
+    const merged = mergeConfig(renameOld(shared, logger), renameOld(personal, logger));
+    return parseConfig(applyEnvOverrides(merged, env), options);
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     throw new ConfigError(`${error.message}\n（共用配置 ${sharedPath}，个人配置 ${path}）`);

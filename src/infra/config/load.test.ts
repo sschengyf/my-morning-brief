@@ -234,6 +234,36 @@ describe('loadConfig', () => {
       });
     });
 
+    it('renames brief_days in each file before merging, so a personal one still wins', async () => {
+      const { sharedPath, path } = await files(
+        `${SHARED}\n[todo]\nurgent_days = 3`,
+        `${PERSONAL}\n[todo]\nbrief_days = 5`,
+      );
+      const logger = recordingLogger();
+      const env = { MORNING_BRIEF_SHARED_CONFIG: sharedPath, DISCORD_BOT_TOKEN: 't' };
+      const config = await loadConfig({ path, env, logger, requireChannel: false });
+      expect(config.todo.urgent_days).toBe(5);
+      expect(config.todo).not.toHaveProperty('brief_days');
+      expect(logger.warnings).toEqual([
+        expect.stringContaining('todo.brief_days 已经改名为 todo.urgent_days'),
+      ]);
+    });
+
+    it('prefers urgent_days when one file has both names', async () => {
+      const { sharedPath, path } = await files(
+        SHARED,
+        `${PERSONAL}\n[todo]\nbrief_days = 5\nurgent_days = 2`,
+      );
+      const env = { MORNING_BRIEF_SHARED_CONFIG: sharedPath, DISCORD_BOT_TOKEN: 't' };
+      const config = await loadConfig({
+        path,
+        env,
+        logger: recordingLogger(),
+        requireChannel: false,
+      });
+      expect(config.todo.urgent_days).toBe(2);
+    });
+
     it('accepts the shipped shared and personal templates together', async () => {
       const read = (name: string) => readFile(join(PROJECT_ROOT, name), 'utf8');
       const { sharedPath, path } = await files(

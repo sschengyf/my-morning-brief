@@ -51,11 +51,12 @@ export function formatByQuadrant(
   only: Quadrant[] = [1, 2, 3, 4],
 ): string {
   const showLists = severalLists(todos);
+  const tagged = todos.map((todo) => ({ todo, q: quadrant(todo, today, urgentDays) }));
   return only
-    .map((q) => todos.filter((todo) => quadrant(todo, today, urgentDays) === q))
-    .flatMap((group, i) =>
-      group.length > 0 ? [`${QUADRANT_NAMES[only[i]!]}\n${lines(group, today, showLists)}`] : [],
-    )
+    .flatMap((q) => {
+      const group = tagged.filter((t) => t.q === q).map((t) => t.todo);
+      return group.length > 0 ? [`${QUADRANT_NAMES[q]}\n${lines(group, today, showLists)}`] : [];
+    })
     .join('\n\n');
 }
 

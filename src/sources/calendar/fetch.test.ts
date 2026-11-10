@@ -21,7 +21,7 @@ describe('fetchCalendar', () => {
   const now = DateTime.fromISO('2026-11-03T08:00', { zone: AUCKLAND });
   const standup = vcal(['DTSTART:20261102T200000Z', 'DTEND:20261102T203000Z', 'SUMMARY:Standup']);
 
-  it('says when no calendar is configured', async () => {
+  it('says there are no events when no calendar is configured', async () => {
     expect((await fetchCalendar([], AUCKLAND, now)).text).toBe('今天没有日程');
   });
 

@@ -117,14 +117,9 @@ export const schema = z
         // Microsoft To Do lists to read; empty means the default list.
         lists: z.array(z.string().trim().min(1)).default([]),
         // Microsoft To Do: due within this many days (or overdue) is urgent; the brief lists only those.
-        urgent_days: nonNegativeInt.optional(),
-        // The old name of urgent_days, still read.
-        brief_days: nonNegativeInt.optional(),
+        // Its old name brief_days is renamed in each file before merging (load.ts).
+        urgent_days: nonNegativeInt.default(3),
       })
-      .transform(({ urgent_days, brief_days, ...todo }) => ({
-        ...todo,
-        urgent_days: urgent_days ?? brief_days ?? 3,
-      }))
       .prefault({}),
     microsoft: z
       .object({

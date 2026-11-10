@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import ical, { type DateWithTimeZone, type ParameterValue } from 'node-ical';
 import { oneLine } from '../common.js';
 import { isoDay } from './format.js';
+import { dropDuplicateDates } from './repair.js';
 import type { CalendarEvent } from './types.js';
 
 /**
@@ -24,7 +25,7 @@ export function eventsOnDay(icsText: string, timezone: string, day: DateTime): C
   };
 
   const events: CalendarEvent[] = [];
-  for (const component of Object.values(ical.sync.parseICS(icsText))) {
+  for (const component of Object.values(ical.sync.parseICS(dropDuplicateDates(icsText)))) {
     // Overrides (RECURRENCE-ID) are applied by expandRecurringEvent via their master.
     if (component?.type !== 'VEVENT' || component.recurrenceid) continue;
     for (const instance of ical.expandRecurringEvent(component, window)) {

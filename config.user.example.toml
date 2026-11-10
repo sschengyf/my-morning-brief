@@ -28,7 +28,7 @@ extra_feeds = []   # 在共用订阅源之外再加的，写法和 feeds 一样�
 [todo]
 backend = "markdown"
 lists = []   # ms_todo 时读哪些列表，例如 ["Tasks", "Work"]；不写就读默认列表
-brief_days = 3   # ms_todo 时早报只写已过期、今天和这么多天内截止的待办；/todo 仍然列出全部
+urgent_days = 3   # ms_todo 时几天内截止算紧急；早报只写紧急的待办，/todo 按艾森豪威尔矩阵列出全部
 
 [monitor]
 healthcheck_url = ""   # 可选，这个人自己的健康检查地址，例如 healthchecks.io 的 ping 地址（README 第 17 节）

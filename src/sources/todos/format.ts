@@ -19,12 +19,44 @@ function daysUntil(due: string, today: string): number {
   return Math.round(day(due).diff(day(today), 'days').days);
 }
 
+/** Eisenhower quadrants: 1 important and urgent, 2 important, 3 urgent, 4 neither. */
+export type Quadrant = 1 | 2 | 3 | 4;
+
+const QUADRANT_NAMES: Record<Quadrant, string> = {
+  1: '🔥 重要且紧急',
+  2: '📅 重要不紧急',
+  3: '⚡ 紧急不重要',
+  4: '💤 其他',
+};
+
 /**
- * What the brief lists: overdue, due today and due within `days`. Todos due
- * later or never stay out, so the brief does not repeat them every day.
+ * Important means starred; urgent means overdue or due within `urgentDays`.
+ * Undated todos are never urgent.
  */
-export function briefTodos(todos: Todo[], today: string, days: number): Todo[] {
-  return todos.filter((todo) => todo.due !== null && daysUntil(todo.due, today) <= days);
+export function quadrant(todo: Todo, today: string, urgentDays: number): Quadrant {
+  const urgent = todo.due !== null && daysUntil(todo.due, today) <= urgentDays;
+  if (todo.important) return urgent ? 1 : 2;
+  return urgent ? 3 : 4;
+}
+
+/**
+ * The todos grouped by quadrant under headings, only the quadrants in `only`
+ * (the brief takes 1 and 3), empty groups left out. Empty text when nothing
+ * is left.
+ */
+export function formatByQuadrant(
+  todos: Todo[],
+  today: string,
+  urgentDays: number,
+  only: Quadrant[] = [1, 2, 3, 4],
+): string {
+  const showLists = severalLists(todos);
+  return only
+    .map((q) => todos.filter((todo) => quadrant(todo, today, urgentDays) === q))
+    .flatMap((group, i) =>
+      group.length > 0 ? [`${QUADRANT_NAMES[only[i]!]}\n${lines(group, today, showLists)}`] : [],
+    )
+    .join('\n\n');
 }
 
 /** "截止 11月5日，还有 3 天", "今天截止" or "已过期 2 天", counted from `today` (YYYY-MM-DD). */
@@ -45,12 +77,19 @@ export function describeDue(due: string, today: string): string {
  */
 export function formatTodos(todos: Todo[], today: string): string {
   if (todos.length === 0) return '没有未完成的待办';
-  const severalLists = new Set(todos.map((todo) => todo.list)).size > 1;
+  return lines(todos, today, severalLists(todos));
+}
+
+function severalLists(todos: Todo[]): boolean {
+  return new Set(todos.map((todo) => todo.list)).size > 1;
+}
+
+function lines(todos: Todo[], today: string, showLists: boolean): string {
   return sortTodos(todos)
     .map((todo) => {
       const bullet = todo.number === undefined ? '- ' : `${todo.number}. `;
       const star = todo.important ? '⭐ ' : '';
-      const list = severalLists && todo.list ? `[${todo.list}] ` : '';
+      const list = showLists && todo.list ? `[${todo.list}] ` : '';
       const due = todo.due ? `（${describeDue(todo.due, today)}）` : '';
       return `${bullet}${star}${list}${todo.title}${due}`;
     })

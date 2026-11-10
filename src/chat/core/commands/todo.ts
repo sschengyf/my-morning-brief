@@ -3,11 +3,11 @@ import {
   addTodo,
   completeTodo,
   describeError,
-  formatTodos,
   MsLoginNeeded,
   msAuthOptions,
   readTodos,
   startDeviceLogin,
+  todoText,
 } from '#/sources/index.js';
 import type { Command, CommandContext } from '../context.js';
 
@@ -21,7 +21,7 @@ export const todoCommand: Command = async (_args, io, ctx) => {
     return io.reply(`待办获取失败：${describeError(error)}`);
   }
   if (todos.length === 0) return io.reply('没有未完成的待办 🎉');
-  await io.reply(`未完成的待办：\n${formatTodos(todos, await today(ctx))}`);
+  await io.reply(`未完成的待办：\n${todoText(ctx.deps.config, todos, await today(ctx))}`);
 };
 
 export const addCommand: Command = async (args, io, ctx) => {

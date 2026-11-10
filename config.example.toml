@@ -57,7 +57,7 @@ select_timeout_seconds = 120  # 模型筛选新闻的超时，超时或失败就
 backend = "markdown"   # markdown：下面的 todo.md，用 /add、/done 管理；ms_todo：Microsoft To Do，只读（README 第 18 节）
 file = "todo.md"   # markdown 用。相对路径按 data_dir 解析，支持 ~ 和绝对路径
 lists = []         # ms_todo 用：读哪些列表，例如 ["Tasks", "Work"]；不写就读默认列表
-brief_days = 3     # ms_todo 用：早报只写已过期、今天和这么多天内截止的待办；/todo 仍然列出全部
+urgent_days = 3    # ms_todo 用：几天内截止算紧急；早报只写紧急的待办，/todo 按艾森豪威尔矩阵列出全部
 
 [microsoft]
 client_id = ""   # ms_todo 用：Azure 应用注册里的“应用程序（客户端）ID”，不是机密

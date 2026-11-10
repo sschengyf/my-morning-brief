@@ -52,7 +52,7 @@ describe('fetchTodos', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('gives the brief only todos due soon from Microsoft To Do, and chat all of them', async () => {
+  it('gives the brief only the urgent quadrants from Microsoft To Do, and chat all of them', async () => {
     const config = await msConfig();
     await writeFile(
       join(config.paths.data_dir, 'ms-token.json'),
@@ -73,12 +73,14 @@ describe('fetchTodos', () => {
           }),
     );
     const brief = await fetchTodos(config, '2026-11-02', { fetch: fetchMock }, 'brief');
-    expect(brief.text).toBe('- Soon（截止 11月4日，还有 2 天）');
+    expect(brief.text).toBe('⚡ 紧急不重要\n- Soon（截止 11月4日，还有 2 天）');
     expect(brief.raw.open).toHaveLength(3); // the archive keeps them all
     const chat = await fetchTodos(config, '2026-11-02', { fetch: fetchMock });
-    expect(chat.text.split('\n')).toHaveLength(3);
+    expect(chat.text).toBe(
+      '📅 重要不紧急\n- ⭐ Someday\n\n⚡ 紧急不重要\n- Soon（截止 11月4日，还有 2 天）\n\n💤 其他\n- Later（截止 11月20日，还有 18 天）',
+    );
 
-    const nothingSoon = { ...config, todo: { ...config.todo, brief_days: 1 } };
+    const nothingSoon = { ...config, todo: { ...config.todo, urgent_days: 1 } };
     const empty = await fetchTodos(nothingSoon, '2026-11-02', { fetch: fetchMock }, 'brief');
     expect(empty.text).toBe('近 1 天没有要截止的待办');
   });

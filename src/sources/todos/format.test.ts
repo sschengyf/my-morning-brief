@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefTodos, describeDue, formatTodos, sortTodos } from './format.js';
+import { describeDue, formatByQuadrant, formatTodos, quadrant, sortTodos } from './format.js';
 import type { Todo } from './types.js';
 
 const todo = (title: string, extra: Partial<Todo> = {}): Todo => ({
@@ -25,22 +25,59 @@ describe('describeDue', () => {
   });
 });
 
-describe('briefTodos', () => {
-  it('keeps overdue, today and the next few days, counting the last day in', () => {
-    const todos = [
-      todo('overdue', { due: '2026-10-30' }),
-      todo('today', { due: '2026-11-02' }),
-      todo('in 3 days', { due: '2026-11-05' }),
-      todo('in 4 days', { due: '2026-11-06', important: true }),
-      todo('starred, no date', { important: true }),
-      todo('no date'),
-    ];
-    expect(briefTodos(todos, '2026-11-02', 3).map((t) => t.title)).toEqual([
-      'overdue',
-      'today',
-      'in 3 days',
-    ]);
-    expect(briefTodos(todos, '2026-11-02', 0).map((t) => t.title)).toEqual(['overdue', 'today']);
+describe('quadrant', () => {
+  it('uses the star for important and urgent_days for urgent, counting the last day in', () => {
+    const at = (extra: Partial<Todo>) => quadrant(todo('x', extra), '2026-11-02', 3);
+    expect(at({ important: true, due: '2026-11-05' })).toBe(1);
+    expect(at({ important: true, due: '2026-10-30' })).toBe(1); // overdue
+    expect(at({ important: true, due: '2026-11-06' })).toBe(2); // starred but far off
+    expect(at({ important: true })).toBe(2); // starred, no date
+    expect(at({ due: '2026-11-02' })).toBe(3); // due today
+    expect(at({ due: '2026-11-06' })).toBe(4);
+    expect(at({})).toBe(4);
+    expect(quadrant(todo('x', { due: '2026-11-03' }), '2026-11-02', 0)).toBe(4);
+  });
+});
+
+describe('formatByQuadrant', () => {
+  const todos = [
+    todo('Plain'),
+    todo('Pay rent', { due: '2026-11-03', important: true }),
+    todo('Reply landlord', { due: '2026-11-04' }),
+    todo('Learn Spanish', { important: true }),
+  ];
+
+  it('groups every quadrant under a heading, leaving out empty ones', () => {
+    expect(formatByQuadrant(todos, '2026-11-02', 3)).toBe(
+      [
+        '🔥 重要且紧急',
+        '- ⭐ Pay rent（截止 11月3日，还有 1 天）',
+        '',
+        '📅 重要不紧急',
+        '- ⭐ Learn Spanish',
+        '',
+        '⚡ 紧急不重要',
+        '- Reply landlord（截止 11月4日，还有 2 天）',
+        '',
+        '💤 其他',
+        '- Plain',
+      ].join('\n'),
+    );
+    expect(formatByQuadrant([todos[0]!], '2026-11-02', 3)).toBe('💤 其他\n- Plain');
+  });
+
+  it('keeps only the quadrants asked for, in that order', () => {
+    expect(formatByQuadrant(todos, '2026-11-02', 3, [1, 3])).toBe(
+      '🔥 重要且紧急\n- ⭐ Pay rent（截止 11月3日，还有 1 天）\n\n⚡ 紧急不重要\n- Reply landlord（截止 11月4日，还有 2 天）',
+    );
+    expect(formatByQuadrant([todos[0]!], '2026-11-02', 3, [1, 3])).toBe('');
+  });
+
+  it('names lists across groups when the todos come from several', () => {
+    const mixed = [todo('A', { important: true }), todo('B', { list: 'Shopping' })];
+    expect(formatByQuadrant(mixed, '2026-11-02', 3)).toBe(
+      '📅 重要不紧急\n- ⭐ [Tasks] A\n\n💤 其他\n- [Shopping] B',
+    );
   });
 });
 

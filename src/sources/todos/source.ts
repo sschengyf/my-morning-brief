@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { Config } from '#/infra/index.js';
 import { describeError, type SourceResult } from '../common.js';
-import { briefTodos, formatTodos } from './format.js';
+import { formatByQuadrant, formatTodos } from './format.js';
 import type { MsAuthOptions } from './ms-auth.js';
 import { listMsTodos } from './ms-todo.js';
 import { listTodos } from './store.js';
@@ -50,9 +50,27 @@ export async function readTodos(
 }
 
 /**
- * The todos for the brief (`scope: 'brief'`: Microsoft To Do keeps only those
- * due soon) or for chat (all of them); `today` (YYYY-MM-DD) is in the
- * effective timezone. The archive gets every open todo either way.
+ * How todos are shown. todo.md: one numbered list. Microsoft To Do: grouped
+ * by Eisenhower quadrant; the brief (`scope: 'brief'`) keeps only the urgent
+ * quadrants (1 and 3), so it does not repeat later and undated todos every day.
+ */
+export function todoText(
+  config: Pick<TodoConfig, 'todo'>,
+  todos: Todo[],
+  today: string,
+  scope: 'brief' | 'all' = 'all',
+): string {
+  // todo.md has no stars or due dates: everything would land in quadrant 4.
+  if (config.todo.backend !== 'ms_todo') return formatTodos(todos, today);
+  const days = config.todo.urgent_days;
+  const text = formatByQuadrant(todos, today, days, scope === 'brief' ? [1, 3] : undefined);
+  if (text) return text;
+  return scope === 'brief' ? `近 ${days} 天没有要截止的待办` : '没有未完成的待办';
+}
+
+/**
+ * The todos for the brief or chat (see `todoText`); `today` (YYYY-MM-DD) is
+ * in the effective timezone. The archive gets every open todo either way.
  */
 export async function fetchTodos(
   config: TodoConfig,
@@ -62,14 +80,7 @@ export async function fetchTodos(
 ): Promise<SourceResult<TodosRaw>> {
   try {
     const open = await readTodos(config, options);
-    // todo.md has no due dates yet, so filtering would leave nothing.
-    if (scope === 'all' || config.todo.backend !== 'ms_todo') {
-      return { text: formatTodos(open, today), raw: { open }, ok: true };
-    }
-    const days = config.todo.brief_days;
-    const soon = briefTodos(open, today, days);
-    const text = soon.length > 0 ? formatTodos(soon, today) : `近 ${days} 天没有要截止的待办`;
-    return { text, raw: { open }, ok: true };
+    return { text: todoText(config, open, today, scope), raw: { open }, ok: true };
   } catch (error) {
     return { text: `（待办获取失败：${describeError(error)}）`, raw: { open: [] }, ok: false };
   }

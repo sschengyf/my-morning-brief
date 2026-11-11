@@ -9,7 +9,7 @@ import {
   numberNews,
 } from '#/sources/index.js';
 import { formatPickInput, parsePicks, type PickRequest } from './pick-news.js';
-import { BRIEF_PROMPT, CHAT_PROMPT, SELECT_PROMPT } from './prompts.js';
+import { briefPrompt, CHAT_PROMPT, SELECT_PROMPT } from './prompts.js';
 import { sanitizeBrief, sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
 import type { ChatMessage, LlmClient } from './types.js';
 
@@ -100,7 +100,7 @@ export class LlmService {
     const { input, news } = this.fitBriefInput(data);
     return this.run('brief', async () => {
       const reply = await this.client.chat([
-        { role: 'system', content: BRIEF_PROMPT },
+        { role: 'system', content: briefPrompt(data.gather.review !== undefined) },
         { role: 'user', content: input },
       ]);
       const text = stripThink(reply);
@@ -142,7 +142,8 @@ export class LlmService {
         ...data.gather,
         ...(newsText !== undefined && { news: newsText }),
       });
-      return { input, news, tokens: estimateTokens(BRIEF_PROMPT) + estimateTokens(input) };
+      const prompt = briefPrompt(data.gather.review !== undefined);
+      return { input, news, tokens: estimateTokens(prompt) + estimateTokens(input) };
     };
 
     const total = data.news?.items.length ?? 0;

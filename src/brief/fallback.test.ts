@@ -63,4 +63,12 @@ describe('formatFallbackBrief', () => {
       ].join('\n\n'),
     );
   });
+
+  it('adds the weekly review after the todos', () => {
+    const data = briefData(0);
+    data.gather.review = '📅 重要不紧急\n- ⭐ Learn Spanish';
+    expect(formatFallbackBrief(data)).toContain(
+      '✅ **待办**\n1. Renew passport\n\n🗓 **本周回顾**\n📅 重要不紧急\n- ⭐ Learn Spanish',
+    );
+  });
 });

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { describeDue, formatByQuadrant, formatTodos, quadrant, sortTodos } from './format.js';
+import {
+  describeDue,
+  formatByQuadrant,
+  formatTodos,
+  isReviewDay,
+  quadrant,
+  sortTodos,
+} from './format.js';
 import type { Todo } from './types.js';
 
 const todo = (title: string, extra: Partial<Todo> = {}): Todo => ({
@@ -22,6 +29,23 @@ describe('describeDue', () => {
     expect(describeDue('2027-01-02', '2026-12-31')).toBe('截止 2027年1月2日，还有 2 天');
     // New Zealand daylight saving starts on 27 Sep 2026; a date is still a whole day.
     expect(describeDue('2026-09-28', '2026-09-26')).toBe('截止 9月28日，还有 2 天');
+  });
+});
+
+describe('isReviewDay', () => {
+  it('matches the weekday of the date, across a month and a year', () => {
+    // 2 Nov 2026 is a Monday.
+    const week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    week.forEach((name, i) => {
+      expect(isReviewDay(`2026-11-0${2 + i}`, name)).toBe(true);
+      expect(isReviewDay(`2026-11-0${2 + i}`, week[(i + 1) % 7]!)).toBe(false);
+    });
+    expect(isReviewDay('2026-12-01', 'tue')).toBe(true);
+    expect(isReviewDay('2027-01-03', 'sun')).toBe(true);
+  });
+
+  it('is never a review day when none is set', () => {
+    expect(isReviewDay('2026-11-08', '')).toBe(false);
   });
 });
 

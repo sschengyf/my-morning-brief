@@ -9,6 +9,8 @@ export interface GatherInput {
   weather: string;
   calendar: string;
   todos: string;
+  /** The weekly review, only in that day's brief. */
+  review?: string;
   /** Omitted when news is skipped (weekend with weekend_news = false). */
   news?: string;
 }
@@ -36,6 +38,7 @@ export function gatherText(input: GatherInput): string {
     ['日程', input.calendar],
     ['待办', input.todos],
   ];
+  if (input.review !== undefined) sections.push(['每周回顾', input.review]);
   if (input.news !== undefined) sections.push(['新闻', input.news]);
 
   return [

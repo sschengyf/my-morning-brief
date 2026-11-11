@@ -6,7 +6,7 @@ import { makeTempDir, minimalRawConfig, recordingLogger } from '../../test/helpe
 import { Archive } from '#/archive/archive.js';
 import type { ArchiveRaw } from '#/archive/types.js';
 import { parseConfig } from '#/infra/config/parse.js';
-import { SELECT_PROMPT } from '#/llm/prompts.js';
+import { SELECT_PROMPT, WEEKLY_REVIEW_PROMPT } from '#/llm/prompts.js';
 import { LlmService } from '#/llm/service.js';
 import type { LlmClient } from '#/llm/types.js';
 import type { NewsItem } from '#/sources/news/types.js';
@@ -59,9 +59,11 @@ async function setup(
     ...options.config,
   });
   const calls: string[] = [];
+  const systemPrompts: string[] = [];
   const client: LlmClient = {
     chat: async (messages) => {
       calls.push(messages.at(-1)!.content);
+      systemPrompts.push(messages[0]!.content);
       const picking = messages[0]?.content === SELECT_PROMPT;
       const reply = picking && 'pickReply' in options ? options.pickReply : options.reply;
       if (reply instanceof Error) throw reply;
@@ -82,7 +84,7 @@ async function setup(
   const send = vi.fn(async (text: string) => {
     sent.push(text);
   });
-  return { config, deps, archive, calls, sent, send };
+  return { config, deps, archive, calls, systemPrompts, sent, send };
 }
 
 describe('runBrief', () => {
@@ -124,6 +126,25 @@ describe('runBrief', () => {
     );
     expect(input.startsWith('你是用户的私人助理')).toBe(true);
     expect(input).toContain(calls[0]);
+  });
+
+  it('gives the model the weekly review as its own section, with its rule', async () => {
+    const plain = await setup();
+    await runBrief({ kind: 'manual', send: plain.send, archive: false }, plain.deps);
+    const sources = {
+      ...fakeSources(),
+      todos: async () => ({
+        text: '近 3 天没有要截止的待办',
+        raw: { open: [] },
+        ok: true,
+        review: '📅 重要不紧急\n- ⭐ A',
+      }),
+    };
+    const review = await setup({ sources });
+    await runBrief({ kind: 'manual', send: review.send, archive: false }, review.deps);
+    expect(review.systemPrompts.at(-1)).toContain(WEEKLY_REVIEW_PROMPT);
+    expect(review.calls.at(-1)).toContain('<数据 类型="每周回顾">\n📅 重要不紧急\n- ⭐ A');
+    expect(plain.systemPrompts.at(-1)).not.toContain(WEEKLY_REVIEW_PROMPT);
   });
 
   it('lets the model pick brief_count news before writing, and archives how', async () => {

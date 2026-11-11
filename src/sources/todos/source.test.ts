@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { makeTempDir, testConfig } from '../../../test/helpers.js';
 import { parseConfig } from '#/infra/config/parse.js';
 import { minimalRawConfig } from '../../../test/helpers.js';
-import { fetchTodos, readTodos } from './source.js';
+import { fetchTodos, readTodos, reviewText, todoText } from './source.js';
+import type { Todo } from './types.js';
 
 const CLIENT_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -74,11 +75,20 @@ describe('fetchTodos', () => {
     );
     const brief = await fetchTodos(config, '2026-11-02', { fetch: fetchMock }, 'brief');
     expect(brief.text).toBe('⚡ 紧急不重要\n- Soon（截止 11月4日，还有 2 天）');
+    expect(brief).not.toHaveProperty('review');
     expect(brief.raw.open).toHaveLength(3); // the archive keeps them all
     const chat = await fetchTodos(config, '2026-11-02', { fetch: fetchMock });
     expect(chat.text).toBe(
       '📅 重要不紧急\n- ⭐ Someday\n\n⚡ 紧急不重要\n- Soon（截止 11月4日，还有 2 天）\n\n💤 其他\n- Later（截止 11月20日，还有 18 天）',
     );
+
+    // 2026-11-02 is a Monday.
+    const review = { ...config, todo: { ...config.todo, review_day: 'mon' as const } };
+    const reviewed = await fetchTodos(review, '2026-11-02', { fetch: fetchMock }, 'brief');
+    expect(reviewed.text).toBe(brief.text);
+    expect(reviewed.review).toBe('📅 重要不紧急\n- ⭐ Someday');
+    const chatOnReviewDay = await fetchTodos(review, '2026-11-02', { fetch: fetchMock });
+    expect(chatOnReviewDay).not.toHaveProperty('review');
 
     const nothingSoon = { ...config, todo: { ...config.todo, urgent_days: 1 } };
     const empty = await fetchTodos(nothingSoon, '2026-11-02', { fetch: fetchMock }, 'brief');
@@ -116,5 +126,50 @@ describe('fetchTodos', () => {
     expect(todos).toEqual([
       { title: 'Pay water bill', due: '2026-11-05', important: true, list: 'Tasks' },
     ]);
+  });
+});
+
+describe('reviewText', () => {
+  const todo = (title: string, extra: Partial<Todo> = {}): Todo => ({
+    title,
+    due: null,
+    important: false,
+    list: 'Tasks',
+    ...extra,
+  });
+  const todos = [
+    todo('Plain'),
+    todo('Learn Spanish', { important: true }),
+    todo('Reply landlord', { due: '2026-11-09' }),
+    todo('Pay rent', { due: '2026-11-10', important: true }),
+  ];
+  const config = (review_day: '' | 'mon' | 'sun', backend: 'ms_todo' | 'markdown' = 'ms_todo') => ({
+    todo: { backend, file: 'todo.md', lists: [], urgent_days: 3, review_day },
+  });
+  const SUNDAY = '2026-11-08';
+
+  it('lists the important, not urgent todos on the review day', () => {
+    expect(reviewText(config('sun'), todos, SUNDAY)).toBe('📅 重要不紧急\n- ⭐ Learn Spanish');
+  });
+
+  it('is empty with nothing to review, on other days, without review_day, or for todo.md', () => {
+    expect(
+      reviewText(
+        config('sun'),
+        todos.filter((t) => t.due),
+        SUNDAY,
+      ),
+    ).toBe('');
+    expect(reviewText(config('mon'), todos, SUNDAY)).toBe('');
+    expect(reviewText(config(''), todos, SUNDAY)).toBe('');
+    expect(reviewText(config('sun', 'markdown'), todos, SUNDAY)).toBe('');
+  });
+
+  it('leaves the brief todos and /todo as they are on the review day', () => {
+    expect(todoText(config('sun'), todos, SUNDAY, 'brief')).toBe(
+      todoText(config(''), todos, SUNDAY, 'brief'),
+    );
+    expect(todoText(config('sun'), todos, SUNDAY, 'brief')).not.toContain('重要不紧急');
+    expect(todoText(config('sun'), todos, SUNDAY)).toBe(todoText(config(''), todos, SUNDAY));
   });
 });

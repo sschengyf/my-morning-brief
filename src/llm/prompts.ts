@@ -27,6 +27,17 @@ export const BRIEF_PROMPT = `你是用户的私人助理，负责写每天的早
 [N2] 来源 Hacker News｜WTF Ubuntu?｜（只有标题）
 → - Ubuntu 这是怎么了？[N2]`;
 
+/**
+ * Added to BRIEF_PROMPT only on the weekly review day: a standing "if the data
+ * has this section" rule made the model write an empty review on other days.
+ */
+export const WEEKLY_REVIEW_PROMPT = `今天是每周回顾：数据里有“每周回顾”一节，是重要但不紧急的待办。在待办一节之后另起一段，开头写“🗓 本周回顾”，把这一节的待办逐条列出，再用一两句话提醒这周给它们安排时间，不要替用户排具体时间。这些待办只写在本周回顾里，待办一节只写“待办”数据里的。`;
+
+/** The brief's system prompt; `weeklyReview` when the data has a 每周回顾 section. */
+export function briefPrompt(weeklyReview = false): string {
+  return weeklyReview ? `${BRIEF_PROMPT}\n\n${WEEKLY_REVIEW_PROMPT}` : BRIEF_PROMPT;
+}
+
 export const CHAT_PROMPT = `你是用户的私人助理，用简体中文简洁地回答。下面附上今天的数据（天气、日程、待办、早报用到的新闻）。
 
 规则：

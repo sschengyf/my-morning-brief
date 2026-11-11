@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { Archive, ArchiveRaw, BriefKind, NewsRecord, ScheduleRef } from '#/archive/index.js';
 import { type Config, logger as defaultLogger, type Logger } from '#/infra/index.js';
-import { BRIEF_PROMPT, type BriefData, type LlmService, type PickRequest } from '#/llm/index.js';
+import { briefPrompt, type BriefData, type LlmService, type PickRequest } from '#/llm/index.js';
 import { getEffectiveLocation, type Location } from '#/location/index.js';
 import {
   formatNews,
@@ -81,7 +81,14 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
 
   let newsRecord: NewsRecord | null = null;
   let data: BriefData = {
-    gather: { now, location, weather: weather.text, calendar: calendar.text, todos: todos.text },
+    gather: {
+      now,
+      location,
+      weather: weather.text,
+      calendar: calendar.text,
+      todos: todos.text,
+      ...(todos.review !== undefined && { review: todos.review }),
+    },
   };
   if (fetched) {
     const recent = await archive
@@ -138,7 +145,7 @@ export async function runBrief(options: RunBriefOptions, deps: BriefDeps): Promi
       const result = await llm.writeBrief(data);
       text = result.brief;
       input = result.input;
-      modelInput = `${BRIEF_PROMPT}\n\n${result.input}`;
+      modelInput = `${briefPrompt(data.gather.review !== undefined)}\n\n${result.input}`;
       news = result.news;
       if (newsRecord) newsRecord = { ...newsRecord, selected: news, usedIds: result.usedIds };
     } catch (error) {

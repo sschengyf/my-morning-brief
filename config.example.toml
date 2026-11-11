@@ -58,6 +58,7 @@ backend = "markdown"   # markdown：下面的 todo.md，用 /add、/done 管理�
 file = "todo.md"   # markdown 用。相对路径按 data_dir 解析，支持 ~ 和绝对路径
 lists = []         # ms_todo 用：读哪些列表，例如 ["Tasks", "Work"]；不写就读默认列表
 urgent_days = 3    # ms_todo 用：几天内截止算紧急；早报只写紧急的待办，/todo 按艾森豪威尔矩阵列出全部
+review_day = ""    # ms_todo 用：每周这天（"mon"…"sun"）的早报加一段“本周回顾”，列出重要不紧急的待办；不写就不回顾
 
 [microsoft]
 client_id = ""   # ms_todo 用：Azure 应用注册里的“应用程序（客户端）ID”，不是机密

@@ -34,6 +34,9 @@ const feed = z.union([
 ]);
 const nonNegativeInt = z.number().int().nonnegative();
 
+/** Weekdays for todo.review_day, Monday first like luxon's `weekday`. */
+export const REVIEW_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+
 export const schema = z
   .object({
     paths: z.object({ data_dir: z.string().min(1).default('data') }).prefault({}),
@@ -119,6 +122,12 @@ export const schema = z
         // Microsoft To Do: due within this many days (or overdue) is urgent; the brief lists only those.
         // Its old name brief_days is renamed in each file before merging (load.ts).
         urgent_days: nonNegativeInt.default(3),
+        // Microsoft To Do: on this weekday the brief also lists important, not urgent todos.
+        review_day: z
+          .enum(['', ...REVIEW_DAYS], {
+            error: '应为 "mon" "tue" "wed" "thu" "fri" "sat" "sun" 之一；不回顾就不写',
+          })
+          .default(''),
       })
       .prefault({}),
     microsoft: z

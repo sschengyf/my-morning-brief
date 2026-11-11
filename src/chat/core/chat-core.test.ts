@@ -72,7 +72,7 @@ function countingSources() {
     },
     todos: async () => {
       counts.todos++;
-      return { text: `待办第 ${counts.todos} 次读取`, raw: null, ok: true };
+      return { text: `待办第 ${counts.todos} 次读取`, raw: { open: [] }, ok: true };
     },
     news: async () => {
       counts.news++;

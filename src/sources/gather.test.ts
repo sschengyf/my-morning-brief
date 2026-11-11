@@ -37,6 +37,7 @@ describe('gather', () => {
       todos: '1. A',
       news: '[N1] 来源 RNZ｜Story｜Details',
     });
+    expect(text).not.toContain('每周回顾');
     expect(text).toBe(
       [
         '2026年11月3日 星期二，现在 08:00',
@@ -45,6 +46,20 @@ describe('gather', () => {
         '<数据 类型="待办">\n1. A\n</数据>',
         '<数据 类型="新闻">\n[N1] 来源 RNZ｜Story｜Details\n</数据>',
       ].join('\n\n'),
+    );
+  });
+
+  it('adds the weekly review after the todos when there is one', () => {
+    const text = gatherText({
+      now: NOW,
+      location: AUCKLAND,
+      weather: '晴',
+      calendar: '',
+      todos: '1. A',
+      review: '📅 重要不紧急\n- ⭐ B',
+    });
+    expect(text).toContain(
+      '<数据 类型="待办">\n1. A\n</数据>\n\n<数据 类型="每周回顾">\n📅 重要不紧急\n- ⭐ B\n</数据>',
     );
   });
 

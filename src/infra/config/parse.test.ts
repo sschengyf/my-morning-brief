@@ -177,6 +177,15 @@ describe('parseConfig', () => {
     expect(() => parseConfig(raw)).toThrow('todo.backend');
   });
 
+  it('reads review_day, empty by default, and names the valid days', () => {
+    const raw = minimalRawConfig();
+    expect(parseConfig(raw).todo.review_day).toBe('');
+    raw.todo = { review_day: 'sun' };
+    expect(parseConfig(raw).todo.review_day).toBe('sun');
+    raw.todo = { review_day: 'Sunday' };
+    expect(() => parseConfig(raw)).toThrow(/todo\.review_day.*"mon"/);
+  });
+
   it('reads urgent_days, 3 by default', () => {
     const raw = minimalRawConfig();
     expect(parseConfig(raw).todo.urgent_days).toBe(3);

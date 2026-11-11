@@ -11,6 +11,8 @@ export function formatFallbackBrief(data: BriefData): string {
     `📅 **日程**\n${sanitizeOutput(gather.calendar)}`,
     `✅ **待办**\n${sanitizeOutput(gather.todos)}`,
   ];
+  if (gather.review !== undefined)
+    sections.push(`🗓 **本周回顾**\n${sanitizeOutput(gather.review)}`);
   if (data.news) {
     const items = numberNews(data.news.items);
     const lines = items.map(

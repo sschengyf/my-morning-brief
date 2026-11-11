@@ -9,14 +9,15 @@ import {
   type NewsFetchResult,
   type SourceResult,
   type TodoReadOptions,
+  type TodosResult,
 } from '#/sources/index.js';
 
 /** The data sources, replaceable in tests. */
 export interface Sources {
   weather(location: Location, now: DateTime): Promise<SourceResult<unknown>>;
   calendar(timezone: string, now: DateTime): Promise<SourceResult<unknown>>;
-  /** `brief` leaves out todos due later; chat gets them all. */
-  todos(timezone: string, now: DateTime, scope?: 'brief' | 'all'): Promise<SourceResult<unknown>>;
+  /** `brief` leaves out todos due later (except the weekly review); chat gets them all. */
+  todos(timezone: string, now: DateTime, scope?: 'brief' | 'all'): Promise<TodosResult>;
   news(now: DateTime): Promise<NewsFetchResult>;
 }
 

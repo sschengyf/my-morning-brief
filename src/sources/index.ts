@@ -15,6 +15,6 @@ export type {
 } from './news/types.js';
 export { MsLoginNeeded, startDeviceLogin } from './todos/ms-auth.js';
 export { fetchTodos, msAuthOptions, readTodos, todoText } from './todos/source.js';
-export type { TodoReadOptions } from './todos/source.js';
+export type { TodoReadOptions, TodosResult } from './todos/source.js';
 export { addTodo, completeTodo } from './todos/store.js';
 export { fetchWeather } from './weather/fetch.js';

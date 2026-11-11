@@ -28,7 +28,7 @@ const MORNING: Schedule = {
 const sources: Sources = {
   weather: async () => ({ text: '晴', raw: null, ok: true }),
   calendar: async () => ({ text: '今天没有日程', raw: null, ok: true }),
-  todos: async () => ({ text: '没有未完成的待办', raw: null, ok: true }),
+  todos: async () => ({ text: '没有未完成的待办', raw: { open: [] }, ok: true }),
   news: async () => ({
     items: [
       {

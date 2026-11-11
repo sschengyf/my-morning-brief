@@ -1,7 +1,7 @@
 // Public API of llm/: other modules import from here, never from its files.
 export { OllamaClient } from './ollama.js';
 export type { PickRequest } from './pick-news.js';
-export { BRIEF_PROMPT } from './prompts.js';
+export { BRIEF_PROMPT, briefPrompt } from './prompts.js';
 export { cleanSource, sanitizeOutput } from './sanitize.js';
 export { LlmService } from './service.js';
 export type { BriefData } from './service.js';

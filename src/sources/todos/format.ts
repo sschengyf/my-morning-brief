@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { REVIEW_DAYS } from '#/infra/index.js';
 import type { Todo } from './types.js';
 
 /**
@@ -17,6 +18,11 @@ const day = (iso: string) => DateTime.fromISO(iso, { zone: 'utc' });
 /** Whole days from `today` to `due` (both YYYY-MM-DD); negative when overdue. */
 function daysUntil(due: string, today: string): number {
   return Math.round(day(due).diff(day(today), 'days').days);
+}
+
+/** Whether `today` (YYYY-MM-DD) falls on `reviewDay` ("mon"…"sun"); never when it is empty. */
+export function isReviewDay(today: string, reviewDay: string): boolean {
+  return REVIEW_DAYS[day(today).weekday - 1] === reviewDay;
 }
 
 /** Eisenhower quadrants: 1 important and urgent, 2 important, 3 urgent, 4 neither. */

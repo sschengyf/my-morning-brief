@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { recordingLogger } from '../../test/helpers.js';
 import type { Location } from '#/location/effective.js';
 import type { NewsItem, NumberedNews } from '#/sources/news/types.js';
-import { BRIEF_PROMPT, SELECT_PROMPT } from './prompts.js';
+import { BRIEF_PROMPT, SELECT_PROMPT, WEEKLY_REVIEW_PROMPT } from './prompts.js';
 import { type BriefData, estimateTokens, LlmService } from './service.js';
 import type { LlmClient } from './types.js';
 
@@ -63,6 +63,22 @@ function recordingClient(reply = '早上好 [N2]') {
 }
 
 describe('LlmService', () => {
+  it('adds the weekly review rule to the system prompt only when there is a review', async () => {
+    const plain = recordingClient('今天晴。');
+    await new LlmService(plain.client, 16384).writeBrief(briefData(1));
+    expect(plain.calls[0]?.[0]?.content).not.toContain('本周回顾');
+    const review = recordingClient('今天晴。');
+    await new LlmService(review.client, 16384).writeBrief({
+      ...briefData(1),
+      gather: { ...briefData(1).gather, review: '📅 重要不紧急\n- ⭐ A' },
+    });
+    expect(review.calls[0]?.[0]).toEqual({
+      role: 'system',
+      content: `${BRIEF_PROMPT}\n\n${WEEKLY_REVIEW_PROMPT}`,
+    });
+    expect(review.calls[0]?.[1]?.content).toContain('<数据 类型="每周回顾">\n📅 重要不紧急');
+  });
+
   it('writes the brief from the system prompt and gathered data, linking news ids', async () => {
     const { client, calls } = recordingClient('<think>…</think>今天晴。[N2] 见 https://evil.test');
     const result = await new LlmService(client, 16384).writeBrief(briefData(3));

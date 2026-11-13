@@ -145,6 +145,51 @@ sequenceDiagram
 - **对话记忆**（`chat/core/conversation.ts`）：以今天的早报开头，保留最近 10 轮问答。新早报发出后重新开始；`/clear` 只清问题，保留早报。重启后 `restore()` 从归档读回今天的早报。
 - **`/brief`** 也走 `runBrief`，但早报只回复到发起的那个对话；同一时间只允许一份在生成。
 
+### 5.1 `/more`：深入看一条新闻
+
+`/more` 走的是命令分发，但和普通提问一样等进行中的早报、用当天最近一份早报的新闻。代码在 `chat/core/commands/more.ts`，读原文在 `sources/article/`，模型这一侧在 `llm/article.ts` 和 `LlmService`。
+
+```mermaid
+sequenceDiagram
+    actor U as 用户
+    participant C as ChatCore.more
+    participant M as moreCommand
+    participant L as LlmService（排队）
+    participant F as fetchArticle
+    participant W as 新闻网站
+
+    U->>C: /more 3 或 /more 加州富人税
+    C->>M: 参数（不加参数时直接回复用法，不等任何东西）
+    M->>U: 开始“正在输入”，直到回复完
+    M->>C: 要新闻列表
+    C->>C: 早报正在生成就提示并等它<br/>conversation.sync：当天最近一份早报的新闻
+    C-->>M: 新闻列表（N1…N10），没有早报时 null
+    alt 是编号（3、#3、N3、第3条、全角）
+        M->>M: parseNewsNumber → 找 N3（没有这条就直接回复）
+    else 是描述
+        M->>U: 模型忙时提示一句（每次 /more 最多提示一次）
+        M->>L: matchNews：编号、来源、原文标题 + 描述（select_timeout_seconds）
+        L-->>M: "N7" 或 "无"
+    end
+    M->>U: 正在读原文，稍等
+    M->>F: 这条新闻的链接（只能是订阅源给的）
+    F->>W: GET（如实的 User-Agent，20 秒超时）
+    W-->>F: HTML（边读边计，超过 2 MB 中止）
+    F->>F: 按 charset / meta 解码 → Readability 提取正文<br/>不到 300 字算没读到
+    F-->>M: { ok, text } 或 { ok: false, reason }
+    M->>L: summarizeArticle：来源、标题、日期加正文（最多约 6000 token）或摘要，都放进 <数据>
+    L-->>M: 模型写的总结
+    M->>M: 删掉模型写的网址；加上开头“来源 | 原文标题”<br/>读不到原文时加说明；结尾加 [原文](链接)
+    M->>C: 记进对话记忆（链接换回 [N3]）
+    M->>U: 总结
+```
+
+- 编号就是早报里 `- **3**` 的数字，也就是新闻的 `N3`：清理早报时（`sanitizeBrief`）由代码按编号加上去，不靠模型。
+- 读不到原文（403、要 JavaScript、太大、编码不认识、正文太短、超时）不是错误，改用 RSS 摘要写，回复开头说明原因。模型失败或超时才回复“总结失败”，附上原文链接。
+- 认新闻和写总结都在 `LlmService` 的同一个队列里，和早报、普通提问一个一个来；三个容器共用的 Ollama 也是一次处理一个请求，所以正文有上限。
+- 每次 `/more` 记一条日志：按描述认出时写上描述，来源、域名、读没读到原文、正文字数、是否截断、网页和模型各用了几秒。认不出时也记一条。
+- 正文按块级元素（段落、标题、列表项）分行，不看网页源码里的换行：压缩过的网页没有换行，有的网页在句子中间换行。
+
 ## 6. 定时怎么触发
 
 ### 数据

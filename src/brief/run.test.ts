@@ -250,7 +250,7 @@ describe('runBrief', () => {
     expect(calls).toEqual([]);
     expect(result).toMatchObject({ status: 'sent', fallback: true });
     expect(sent[0]).toMatch(/^⚠️ 本地模型暂时不可用/);
-    expect(sent[0]).toContain('- RNZ | Story 1 [原文](https://rnz.test/1)');
+    expect(sent[0]).toContain('- **1** RNZ | Story 1 [原文](https://rnz.test/1)');
     expect(result.input).toContain('<数据 类型="新闻">');
     const raw = (await archive.readRaw('2026-11-03')) as ArchiveRaw;
     expect(raw.fallback).toBe(true);

@@ -8,6 +8,7 @@ import type { ChatIO } from '../channel.js';
 import { historyCommand } from './commands/history.js';
 import { scheduleCommand } from './commands/schedule.js';
 import { cityCommand, homeCommand, whereCommand } from './commands/location.js';
+import { moreCommand } from './commands/more.js';
 import { addCommand, doneCommand, todoCommand, todoLoginCommand } from './commands/todo.js';
 import type { ChatDeps, Command, CommandContext } from './context.js';
 import { Conversation } from './conversation.js';
@@ -61,6 +62,7 @@ export class ChatCore {
       city: cityCommand,
       where: whereCommand,
       home: homeCommand,
+      more: (args, io) => this.more(args, io),
     };
   }
 
@@ -140,6 +142,31 @@ export class ChatCore {
       return;
     }
     if (result.status === 'sent') this.onBrief(result);
+  }
+
+  /** /more, answered from the news of today's latest brief, like a question. */
+  private async more(args: string, io: ChatIO): Promise<void> {
+    // One busy notice at most: waiting for a brief already said so.
+    let noticed = false;
+    const noticeIfBusy = async () => {
+      if (noticed) return;
+      noticed = true;
+      await this.noticeIfBusy(io);
+    };
+    await moreCommand(args, io, this.deps, {
+      // The brief being written may be the one /more picks from.
+      news: async () => {
+        if (this.briefInFlight) {
+          await noticeIfBusy();
+          await this.briefInFlight.catch(() => undefined);
+        }
+        const location = await this.location();
+        await this.conversation.sync(this.clock().setZone(location.timezone).toISODate()!);
+        return this.conversation.today?.news ?? null;
+      },
+      noticeIfBusy,
+      remember: (question, answer) => this.conversation.add(question, answer),
+    });
   }
 
   private async chat(question: string, io: ChatIO): Promise<void> {

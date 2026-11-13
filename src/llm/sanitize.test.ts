@@ -62,7 +62,7 @@ describe('sanitizeBrief', () => {
     { ...newsItem(2), id: 'N2', source: 'CNBC' },
   ];
 
-  it('starts each news list line with its source, after the list mark', () => {
+  it('starts each news list line with its number and source, as a plain list', () => {
     const brief = [
       '今天有雨，最值得看的是央行加息 [N2]',
       '',
@@ -78,9 +78,10 @@ describe('sanitizeBrief', () => {
         '',
         '📰 新闻：',
         // The domain in the feed title stays readable but cannot become a link.
-        '- Latest stories from interest．co．nz | 国债招标结果 | 第 1016 次招标 [原文](https://rnz.test/1)',
-        '2. CNBC | 民主党拿下国会 [原文](https://rnz.test/2)',
-        '3、CNBC | 没有空格的中文编号 [原文](https://rnz.test/2)',
+        '- **1** Latest stories from interest．co．nz | 国债招标结果 | 第 1016 次招标 [原文](https://rnz.test/1)',
+        // Never "2. ": Discord would renumber the list past a missing story.
+        '- **2** CNBC | 民主党拿下国会 [原文](https://rnz.test/2)',
+        '- **2** CNBC | 没有空格的中文编号 [原文](https://rnz.test/2)',
         '3.5 级地震不是列表 [原文](https://rnz.test/2)',
       ].join('\n'),
     );
@@ -95,25 +96,30 @@ describe('sanitizeBrief', () => {
       },
     ];
     expect(sanitizeBrief('- 标题 [N1]', hostile)).toBe(
-      '- Login Big evil．com/login | 标题 [原文](https://rnz.test/1)',
+      '- **1** Login Big evil．com/login | 标题 [原文](https://rnz.test/1)',
     );
   });
 
   it('uses the first known id’s source and leaves lines without known ids alone', () => {
     expect(sanitizeBrief('- 两条合写 [N9] [N2] [N1]\n- 编造的 [N9]', news)).toBe(
-      '- CNBC | 两条合写 [原文](https://rnz.test/2) [原文](https://rnz.test/1)\n- 编造的',
+      '- **2** CNBC | 两条合写 [原文](https://rnz.test/2) [原文](https://rnz.test/1)\n- 编造的',
     );
   });
 
   it('does not repeat a source the model already wrote', () => {
     expect(sanitizeBrief('- CNBC | 民主党拿下国会 [N2]', news)).toBe(
-      '- CNBC | 民主党拿下国会 [原文](https://rnz.test/2)',
+      '- **2** CNBC | 民主党拿下国会 [原文](https://rnz.test/2)',
     );
+  });
+
+  it('keeps the number when the source cleans down to nothing', () => {
+    const blank: NumberedNews[] = [{ ...newsItem(3), id: 'N3', source: '***' }];
+    expect(sanitizeBrief('- 标题 [N3]', blank)).toBe('- **3** 标题 [原文](https://rnz.test/3)');
   });
 
   it('still removes links the model wrote', () => {
     expect(sanitizeBrief('- 详见 evil.test.com/login 和 https://evil.test [N2]', news)).toBe(
-      '- CNBC | 详见 和 [原文](https://rnz.test/2)',
+      '- **2** CNBC | 详见 和 [原文](https://rnz.test/2)',
     );
   });
 });

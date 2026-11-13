@@ -20,6 +20,7 @@ import type { ChatIO } from '../channel.js';
 import { saveSchedules } from '#/schedules/store.js';
 import type { Schedule } from '#/schedules/types.js';
 import { ChatCore } from './chat-core.js';
+import type { ChatDeps } from './context.js';
 
 // Tuesday 3 Nov 2026, 10:00 in Auckland.
 const NOW = DateTime.fromISO('2026-11-02T21:00:00Z');
@@ -91,6 +92,7 @@ interface Setup {
   schedules?: Schedule[] | null;
   /** Extra config sections, e.g. { todo: { backend: 'ms_todo' } }. */
   config?: Record<string, unknown>;
+  fetchArticle?: ChatDeps['fetchArticle'];
 }
 
 const DAILY_0800: Schedule = {
@@ -132,6 +134,7 @@ async function setup(options: Setup = {}) {
     logger,
     now: () => now,
     searchCity: (name, country) => searchCity(name, country, fakeGeocoding),
+    fetchArticle: options.fetchArticle,
   });
 
   const replied: string[] = [];
@@ -450,6 +453,30 @@ describe('ChatCore chat', () => {
     expect(chat.at(-1)).toEqual({ role: 'user', content: '第二条展开讲讲' });
   });
 
+  it('summarises a story of today’s brief with /more, and remembers it for follow-ups', async () => {
+    const fetched: string[] = [];
+    const { send, requests } = await setup({
+      replies: ['早报 [N1] [N2]', '一句话概括', '影响是…'],
+      fetchArticle: async (url) => {
+        fetched.push(url);
+        return { ok: true, text: 'The article.' };
+      },
+    });
+    expect(await send('/more 2')).toEqual(['今天的早报还没生成']);
+    await send('/brief');
+    expect(await send('/more 2')).toEqual([
+      '正在读原文，稍等',
+      '**RNZ | Story 2**\n一句话概括\n\n[原文](https://rnz.test/2)',
+    ]);
+    expect(fetched).toEqual(['https://rnz.test/2']);
+    await send('这有什么影响');
+    expect(requests.at(-1)!.slice(-3)).toEqual([
+      { role: 'user', content: '/more 2（Story 2）' },
+      { role: 'assistant', content: '**RNZ | Story 2**\n一句话概括\n\n[N2]' },
+      { role: 'user', content: '这有什么影响' },
+    ]);
+  });
+
   it('says when there is no brief yet', async () => {
     const { send, requests } = await setup();
     await send('今天天气怎样');
@@ -558,6 +585,33 @@ describe('ChatCore chat', () => {
     expect(replied).toEqual(['上一个问题还在处理，稍等', '一的答案', '二的答案']);
   });
 
+  it('tells the user to wait on /more while the model is busy, but answers at once otherwise', async () => {
+    const first = await setup({ replies: ['早报 [N2]'] });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const noBrief = await setup({ gate, replies: ['答案'] });
+    const pending = noBrief.core.handle('一', noBrief.io);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await noBrief.core.handle('/more', noBrief.io);
+    await noBrief.core.handle('/more 2', noBrief.io);
+    expect(noBrief.replied).toEqual([expect.stringMatching(/^用法：\/more/), '今天的早报还没生成']);
+
+    await first.send('/brief');
+    const busy = await setup({ gate, dataDir: first.config.paths.data_dir, replies: ['答案'] });
+    await busy.core.restore();
+    const question = busy.core.handle('一', busy.io);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const more = busy.core.handle('/more 2', busy.io);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(busy.replied).toEqual(['上一个问题还在处理，稍等', '正在读原文，稍等']);
+    release();
+    await Promise.all([pending, question, more]);
+    expect(busy.replied.slice(2)).toEqual([
+      '答案',
+      expect.stringMatching(/^\*\*RNZ \| Story 2\*\*/),
+    ]);
+  });
+
   it('says a brief is being written when that is what keeps the model busy', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -570,6 +624,31 @@ describe('ChatCore chat', () => {
     release();
     await Promise.all([brief, question]);
     expect(replied).toEqual(['正在生成早报，稍后回复你', '早报', '答案']);
+  });
+
+  it('types while /more waits for a brief being written, and says so only once', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { core, io, replied } = await setup({
+      gate,
+      replies: ['早报 [N1] [N2]', '概括'],
+      fetchArticle: async () => ({ ok: true, text: 'The article.' }),
+    });
+    let typing = 0;
+    const moreIo: ChatIO = { ...io, typing: () => (typing++, () => typing--) };
+    const brief = core.handle('/brief', io);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const more = core.handle('/more 2', moreIo);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(replied).toEqual(['正在生成早报，稍后回复你']);
+    expect(typing).toBe(1);
+    release();
+    await Promise.all([brief, more]);
+    expect(replied.filter((text) => text.includes('稍后') || text.includes('稍等'))).toEqual([
+      '正在生成早报，稍后回复你',
+      '正在读原文，稍等',
+    ]);
+    expect(typing).toBe(0);
   });
 
   it('does not start a second brief while one is being written', async () => {

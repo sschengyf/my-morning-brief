@@ -3,8 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { recordingLogger } from '../../test/helpers.js';
 import type { Location } from '#/location/effective.js';
 import type { NewsItem, NumberedNews } from '#/sources/news/types.js';
-import { BRIEF_PROMPT, SELECT_PROMPT, WEEKLY_REVIEW_PROMPT } from './prompts.js';
-import { type BriefData, estimateTokens, LlmService } from './service.js';
+import {
+  ARTICLE_PROMPT,
+  BRIEF_PROMPT,
+  MATCH_PROMPT,
+  SELECT_PROMPT,
+  WEEKLY_REVIEW_PROMPT,
+} from './prompts.js';
+import { type BriefData, LlmService } from './service.js';
+import { estimateTokens } from './tokens.js';
 import type { LlmClient } from './types.js';
 
 function newsItem(id: number, overrides: Partial<NewsItem> = {}): NewsItem {
@@ -204,5 +211,67 @@ describe('LlmService', () => {
     const service = new LlmService(client, 16384);
     await expect(service.answer({ text: '', news: [] }, [], 'a')).rejects.toThrow('boom');
     expect(await service.answer({ text: '', news: [] }, [], 'b')).toBe('ok');
+  });
+});
+
+describe('LlmService articles', () => {
+  function client(reply: string) {
+    const calls: { messages: Parameters<LlmClient['chat']>[0]; timeout?: number }[] = [];
+    const chat: LlmClient = {
+      chat: async (messages, options) => {
+        calls.push({ messages, timeout: options?.timeoutSeconds });
+        return reply;
+      },
+    };
+    return { chat, calls };
+  }
+
+  it('matches a description to an id with the selection timeout', async () => {
+    const { chat, calls } = client('<think>…</think>N3');
+    expect(await new LlmService(chat, 16384).matchNews(NEWS, '第三条那个', 120)).toBe('N3');
+    expect(calls[0]?.messages[0]).toEqual({ role: 'system', content: MATCH_PROMPT });
+    expect(calls[0]?.timeout).toBe(120);
+  });
+
+  it('frames the summary with the source, title and link, and strips links the model wrote', async () => {
+    const { chat, calls } = client('概括 https://evil.test 和 [点这里](https://evil.test/x)');
+    const item = { ...NEWS[0]!, source: 'RNZ | **Politics**', title: 'A *bold* | title' };
+    const result = await new LlmService(chat, 16384).summarizeArticle(item, {
+      ok: true,
+      text: 'Body.',
+    });
+    expect(calls[0]?.messages[0]).toEqual({ role: 'system', content: ARTICLE_PROMPT });
+    expect(result).toEqual({
+      text: '**RNZ Politics | A bold title**\n概括 和 点这里\n\n[原文](https://rnz.test/1)',
+      truncated: false,
+    });
+  });
+
+  it('cuts a long article to fit and says so', async () => {
+    const { chat, calls } = client('概括');
+    const long = 'word '.repeat(40_000);
+    const result = await new LlmService(chat, 16384).summarizeArticle(NEWS[0]!, {
+      ok: true,
+      text: long,
+    });
+    const input = calls[0]!.messages[1]!.content;
+    expect(result.truncated).toBe(true);
+    expect(input).toContain('（原文较长，只读了前面部分）');
+    expect(estimateTokens(input)).toBeLessThanOrEqual(6100);
+    // A small num_ctx cuts further.
+    const small = client('概括');
+    await new LlmService(small.chat, 4096).summarizeArticle(NEWS[0]!, { ok: true, text: long });
+    expect(estimateTokens(small.calls[0]!.messages[1]!.content)).toBeLessThanOrEqual(3072);
+  });
+
+  it('falls back to the summary, and says so, when num_ctx leaves no room for the article', async () => {
+    const { chat, calls } = client('概括');
+    const result = await new LlmService(chat, 512).summarizeArticle(NEWS[0]!, {
+      ok: true,
+      text: 'Body.',
+    });
+    expect(calls[0]!.messages[1]!.content).toContain('<数据 类型="摘要">');
+    expect(calls[0]!.messages[1]!.content).not.toContain('Body.');
+    expect(result.text).toContain('没能读到原文（模型上下文太小），以下只根据摘要。');
   });
 });

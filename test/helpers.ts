@@ -11,6 +11,11 @@ export function readFixture(path: string): Promise<string> {
   return readFile(join(import.meta.dirname, 'fixtures', path), 'utf8');
 }
 
+/** The raw bytes of a fixture, for files that are not UTF-8. */
+export function readFixtureBytes(path: string): Promise<Buffer> {
+  return readFile(join(import.meta.dirname, 'fixtures', path));
+}
+
 const tempDirs: string[] = [];
 
 afterEach(async () => {
@@ -39,14 +44,17 @@ export function testConfig(dataDir: string): Config {
 }
 
 export interface RecordingLogger extends Logger {
+  infos: string[];
   warnings: string[];
 }
 
 export function recordingLogger(): RecordingLogger {
+  const infos: string[] = [];
   const warnings: string[] = [];
   return {
+    infos,
     warnings,
-    info: () => undefined,
+    info: (message) => infos.push(message),
     warn: (message) => warnings.push(message),
     error: () => undefined,
   };

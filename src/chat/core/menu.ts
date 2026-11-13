@@ -22,6 +22,11 @@ export const COMMANDS = [
     arg: { name: 'number', description: '待办序号', required: true },
   },
   { name: 'todo_login', description: '登录 Microsoft To Do（用它管理待办时）' },
+  {
+    name: 'more',
+    description: '深入看早报里的某条新闻',
+    arg: { name: 'news', description: '新闻编号或描述，例如 3、加州富人税', required: true },
+  },
   { name: 'refresh', description: '重新获取今天的天气、日程和待办' },
   {
     name: 'history',
@@ -60,6 +65,7 @@ export function helpText(backend: keyof typeof TODO_HELP): string {
 /schedule remove 2 删除第 2 个定时
 /schedule clear 删除全部定时
 ${TODO_HELP[backend]}
+/more 3 深入看早报里的第 3 条新闻（也可以写描述，例如 /more 加州富人税；指当天最近一份早报）
 /refresh 重新获取今天的天气、日程和待办
 /history 最近有早报的日期
 /history 11-02 看那天的早报

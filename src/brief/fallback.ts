@@ -17,7 +17,7 @@ export function formatFallbackBrief(data: BriefData): string {
     const items = numberNews(data.news.items);
     const lines = items.map(
       (item) =>
-        `- ${cleanSource(item.source)} | ${sanitizeOutput(item.title)} [原文](${item.link})`,
+        `- **${item.id.slice(1)}** ${cleanSource(item.source)} | ${sanitizeOutput(item.title)} [原文](${item.link})`,
     );
     for (const failure of data.news.failures)
       lines.push(`（${failure.source} 获取失败：${failure.reason}）`);

@@ -58,9 +58,11 @@ const LIST_MARK = /^(\s*(?:[-*•]\s+|\d+[.)、](?!\d)\s*))/;
 
 /**
  * sanitizeOutput for a brief, which also starts each news list line with its
- * source: "- 标题 | 副标题 [N3]" becomes "- RNZ | 标题 | 副标题 [原文](…)". The
- * model is told not to write the source, since it translates names it should
- * copy. Lines outside lists (the greeting citing a story) are left alone.
+ * number and source: "- 标题 | 副标题 [N3]" becomes
+ * "- **3** RNZ | 标题 | 副标题 [原文](…)". The number is the id's, so /more 3
+ * finds it; it is not a "3. " list, which Discord would renumber past a gap.
+ * The model is told not to write the source, since it translates names it
+ * should copy. Lines outside lists (the greeting citing a story) are left alone.
  */
 export function sanitizeBrief(text: string, news: NumberedNews[]): string {
   const sources = new Map(news.map((item) => [item.id.toUpperCase(), cleanSource(item.source)]));
@@ -70,14 +72,16 @@ export function sanitizeBrief(text: string, news: NumberedNews[]): string {
       const clean = sanitizeOutput(line, news);
       const mark = LIST_MARK.exec(clean)?.[1];
       // The first id the map knows; a made-up one before it does not count.
-      const source = [...line.matchAll(NEWS_ID)]
-        .map((match) => sources.get(`N${Number(match[1])}`))
-        .find((name) => name !== undefined);
-      if (mark === undefined || !source) return clean;
+      const number = [...line.matchAll(NEWS_ID)]
+        .map((match) => Number(match[1]))
+        .find((n) => sources.has(`N${n}`));
+      if (mark === undefined || number === undefined) return clean;
+      const source = sources.get(`N${number}`)!;
       let rest = clean.slice(mark.length);
+      if (!source) return `- **${number}** ${rest}`;
       // The model wrote the source anyway, exactly: do not repeat it.
       if (rest.startsWith(`${source} |`)) rest = rest.slice(source.length + 2).trimStart();
-      return `${mark}${source} | ${rest}`;
+      return `- **${number}** ${source} | ${rest}`;
     })
     .join('\n')
     .trim();

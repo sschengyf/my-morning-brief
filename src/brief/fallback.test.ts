@@ -57,7 +57,7 @@ describe('formatFallbackBrief', () => {
         '✅ **待办**\n1. Renew passport',
         '📰 **新闻**\n' +
           [1, 2, 3, 4, 5, 6, 7]
-            .map((i) => `- RNZ | Story ${i} [原文](https://rnz.test/${i})`)
+            .map((i) => `- **${i}** RNZ | Story ${i} [原文](https://rnz.test/${i})`)
             .join('\n') +
           '\n（hnrss 获取失败：HTTP 500）',
       ].join('\n\n'),

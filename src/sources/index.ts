@@ -1,4 +1,6 @@
 // Public API of sources/: other modules import from here, never from its files.
+export { fetchArticle } from './article/fetch.js';
+export type { ArticleResult } from './article/fetch.js';
 export { fetchCalendar } from './calendar/fetch.js';
 export { describeError } from './common.js';
 export type { SourceResult } from './common.js';

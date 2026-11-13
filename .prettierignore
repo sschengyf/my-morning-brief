@@ -5,3 +5,5 @@ pnpm-lock.yaml
 /logs/
 PLAN.md
 .vscode/
+# Saved web pages, some not UTF-8: prettier would rewrite their bytes.
+test/fixtures/article/

@@ -1,5 +1,6 @@
 import { logger as defaultLogger, type Logger } from '#/infra/index.js';
 import {
+  type ArticleResult,
   type FeedFailure,
   formatNews,
   type GatherInput,
@@ -8,9 +9,17 @@ import {
   type NumberedNews,
   numberNews,
 } from '#/sources/index.js';
+import { ARTICLE_MAX_TOKENS, formatArticleInput, formatMatchInput, parseMatch } from './article.js';
 import { formatPickInput, parsePicks, type PickRequest } from './pick-news.js';
-import { briefPrompt, CHAT_PROMPT, SELECT_PROMPT } from './prompts.js';
-import { sanitizeBrief, sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
+import {
+  ARTICLE_PROMPT,
+  briefPrompt,
+  CHAT_PROMPT,
+  MATCH_PROMPT,
+  SELECT_PROMPT,
+} from './prompts.js';
+import { cleanSource, sanitizeBrief, sanitizeOutput, stripThink, usedNewsIds } from './sanitize.js';
+import { estimateTokens } from './tokens.js';
 import type { ChatMessage, LlmClient } from './types.js';
 
 export interface BriefData {
@@ -31,14 +40,6 @@ export interface BriefResult {
 }
 
 export type LlmTask = 'brief' | 'chat';
-
-/** Rough token estimate: one per CJK character, one per four other characters. */
-export function estimateTokens(text: string): number {
-  const cjk =
-    text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu)
-      ?.length ?? 0;
-  return cjk + Math.ceil((text.length - cjk) / 4);
-}
 
 const CONTEXT_BUDGET = 0.75;
 
@@ -109,6 +110,60 @@ export class LlmService {
         input,
         news,
         usedIds: usedNewsIds(text, news),
+      };
+    });
+  }
+
+  /**
+   * Which of today's news a description ("加州富人税") means: an id the caller
+   * checks, or null when the model names none.
+   */
+  matchNews(
+    news: NumberedNews[],
+    description: string,
+    timeoutSeconds: number,
+  ): Promise<string | null> {
+    const input = formatMatchInput(news, description);
+    return this.run('chat', async () => {
+      const reply = await this.client.chat(
+        [
+          { role: 'system', content: MATCH_PROMPT },
+          { role: 'user', content: input },
+        ],
+        { timeoutSeconds },
+      );
+      return parseMatch(stripThink(reply));
+    });
+  }
+
+  /**
+   * An in-depth summary of one story, from its article or, when that could not
+   * be read, its summary. The reply starts with the source and title and ends
+   * with the link, both added here rather than written by the model.
+   */
+  summarizeArticle(
+    item: NumberedNews,
+    article: ArticleResult,
+  ): Promise<{ text: string; truncated: boolean }> {
+    const room = Math.floor(this.numCtx * CONTEXT_BUDGET) - estimateTokens(ARTICLE_PROMPT) - 200;
+    // With no room for any article text, the summary is all the model can go on.
+    const usable: ArticleResult = room > 0 ? article : { ok: false, reason: '模型上下文太小' };
+    const { input, truncated } = formatArticleInput(
+      item,
+      usable,
+      Math.min(ARTICLE_MAX_TOKENS, room),
+    );
+    return this.run('chat', async () => {
+      const reply = await this.client.chat([
+        { role: 'system', content: ARTICLE_PROMPT },
+        { role: 'user', content: input },
+      ]);
+      const note = usable.ok ? '' : `没能读到原文（${usable.reason}），以下只根据摘要。\n\n`;
+      const title = `**${cleanSource(item.source)} | ${cleanSource(item.title)}**`;
+      const summary = sanitizeOutput(stripThink(reply));
+      return {
+        text: `${title}\n${note}${summary}\n\n[原文](${item.link})`,
+        truncated,
       };
     });
   }

@@ -211,7 +211,7 @@ curl -sL --compressed https://www.rnz.co.nz/rss/national.xml | head -20
 - `dedup_days`（默认 3）：最近几天早报里**实际写到**的新闻不再出现；同一天后面的早报也不重复前面的。
 - **深入看某条新闻**：发 `/more 3`（`#3`、`N3`、`第3条`、全角数字也行），或者写描述，例如 `/more 加州富人税`、`/more Kiwibank`，由模型认出是哪条。机器人会读那条新闻的原文，用本地模型写一段不超过 400 字的总结，开头是来源和原文标题，最后是原文链接；之后可以接着追问。
   - 编号指**当天最近一份**早报：中午又发过 `/brief` 的话，`/more 3` 是中午那份的第 3 条。回复开头的标题对不上就是选错了。
-  - 读不到原文时（付费墙、拦截程序访问的网站如 NYT、SCMP、Economist，要 JavaScript 才显示正文的如 Stuff，Google News 的跳转链接如 Reuters、AP），只根据 RSS 摘要写，并在开头说明原因。
+  - 读不到原文时（付费墙、拦截程序访问的网站如 SCMP、Economist，NYT 也经常拦，要 JavaScript 才显示正文的如 Stuff，Google News 的跳转链接如 Reuters、AP），只根据 RSS 摘要写，并在开头说明原因。
   - 2026-11-13 实测（qwen3.6:35b）：读到 2000 字左右的原文时，读网页加写总结约 3 秒，只用摘要时约 1 秒。原文越长越慢，期间模型被占用，其他问题和别人的早报会排在后面。
 - 想知道某天为什么是这几条：看那天的 `raw-*.json` 里的 `news`：`candidates` 是全部候选，`tooOld` 是太旧被过滤的，`dedupExcluded` 是因为最近用过被排除的，`poolSize` 是候选池的条数，`method` 是挑选方式（`model` 模型挑选、`round_robin` 没有调用模型、`round_robin_fallback` 模型失败后按源轮流），`selected` 是写早报用的，`usedIds` 是早报里实际写到的。
 
@@ -374,7 +374,7 @@ node-ical 把全天日期和浮动时间（没有 TZID 也没有 Z 的时间）�
 - 降级早报（模型不可用时）不调用模型挑选，直接用按源轮流的前 `brief_count` 条，全部列出。
 - 链接规范化时去掉 `utm_*`、`at_*`（BBC 加的）、`fbclid`、`gclid`、`mc_cid`、`mc_eid` 和末尾的 `/`。
 - BBC 中文简体 feed（`/zhongwen/simp/rss.xml`）在 2026-11-03 已经 301 跳转到繁体 feed，`fetch` 会自动跟随；模型照样用简体写早报。
-- **`/more` 读原文**（阶段 8.7）：正文用 `@mozilla/readability` 提取，DOM 用 `linkedom`（比 jsdom 轻很多）。2026-11-12 用当天 39 个来源各一条真实链接验证：26 个读到了正文（RNZ、BBC、Guardian、Newsroom、Interest、ABC、NPR、Wired、The Verge、Foreign Policy、Hacker News 指向的文章等，多数 2000–10000 字）；读不到的是 403 拦截（SCMP、NYT、Economist、Politico、The Diplomat、Times of Israel、Seeking Alpha）、Google News 跳转（Reuters、AP，要 JavaScript）、要 JavaScript 显示正文（Stuff）、视频页（Al Jazeera 的视频新闻，正文太短）。User-Agent 照常写明是本程序，不伪装成浏览器去绕过拦截。读不到的退回 RSS 摘要。
+- **`/more` 读原文**（阶段 8.7）：正文用 `@mozilla/readability` 提取，DOM 用 `linkedom`（比 jsdom 轻很多）。2026-11-12 用当天 39 个来源各一条真实链接验证：26 个读到了正文（RNZ、BBC、Guardian、Newsroom、Interest、ABC、NPR、Wired、The Verge、Foreign Policy、Hacker News 指向的文章等，多数 2000–10000 字）；读不到的是 403 拦截（SCMP、NYT、Economist、Politico、The Diplomat、Times of Israel、Seeking Alpha）、Google News 跳转（Reuters、AP，要 JavaScript）、要 JavaScript 显示正文（Stuff）、视频页（Al Jazeera 的视频新闻，正文太短）。User-Agent 照常写明是本程序，不伪装成浏览器去绕过拦截。读不到的退回 RSS 摘要。NYT 不是每篇都拦：2026-11-14 有一篇读到了原文。
   - 只读当天早报里那条新闻的链接；网页限 2 MB（边读边计，不靠 Content-Length），按 Content-Type 或 `<meta charset>` 解码（GBK、Big5 也行）；正文不到 300 字当作没读到。
   - 给模型的正文最多约 6000 token：几个容器共用一个 Ollama，一次只处理一个请求，长文会让别人的早报排队。
   - 编号写成 `- **3**`，不写 `3. `：Discord 会把 `3.` 当成有序列表重新编号，模型漏写一条时显示的数字就和 `/more` 的编号对不上了。
